@@ -1,0 +1,138 @@
+[
+  {
+    "version": "0.1.0",
+    "tag": "v0.1.0",
+    "installer": "PureTube_0.1.0_x64-setup.exe",
+    "size": 3925710,
+    "sha256": "fc8936cf9d9182dc8cb49fb93ab951086d2761060fb6d125c88671f3bcd68eb9",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.1.1",
+    "tag": "v0.1.1",
+    "installer": "PureTube_0.1.1_x64-setup.exe",
+    "size": 3938715,
+    "sha256": "2ac50a06c7eb3f7ac2ae38136b098bb39aca6015086eb46507941ff8da42b4b0",
+    "source": "retained"
+  },
+  {
+    "version": "0.1.2",
+    "tag": "v0.1.2",
+    "installer": "PureTube_0.1.2_x64-setup.exe",
+    "size": 3897637,
+    "sha256": "27223a3d49942891ac91d152af8179857bb46e849ca9c1b332b459aac388f448",
+    "source": "retained"
+  },
+  {
+    "version": "0.2.0",
+    "tag": "v0.2.0",
+    "installer": "PureTube_0.2.0_x64-setup.exe",
+    "size": 4254555,
+    "sha256": "d96c4696ca2220d088195b459c81c25bdc739eea4ae3c2d227ed3812f458e751",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.3.0",
+    "tag": "v0.3.0",
+    "installer": "PureTube_0.3.0_x64-setup.exe",
+    "size": 4288156,
+    "sha256": "b919a2a23569f69e3105cdb69b20a62f2bc9b6dc2fb96fdcfa3047bb7cc41890",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.3.1",
+    "tag": "v0.3.1",
+    "installer": "PureTube_0.3.1_x64-setup.exe",
+    "size": 4290457,
+    "sha256": "d01afa2dab58d147f18f4b6f2df0fc42d119321c78548915675c11376df34fcb",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.4.0",
+    "tag": "v0.4.0",
+    "installer": "PureTube_0.4.0_x64-setup.exe",
+    "size": 4204728,
+    "sha256": "40ecc830a2460c9cd965d9d1b1f3298b9ecad0b26eb1554a843f6492e7e8c9bb",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.4.1",
+    "tag": "v0.4.1",
+    "installer": "PureTube_0.4.1_x64-setup.exe",
+    "size": 4210551,
+    "sha256": "1c6177929440a6976780804c12e6c3c724d958b2488c0e964a7dfb72588ec85d",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.4.2",
+    "tag": "v0.4.2",
+    "installer": "PureTube_0.4.2_x64-setup.exe",
+    "size": 4213404,
+    "sha256": "72ae2d05dfea9d9d25496a6330dc75d44ddc5fbbd2ba13d16377d3a728b2ec4a",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.5.0",
+    "tag": "v0.5.0",
+    "installer": "PureTube_0.5.0_x64-setup.exe",
+    "size": 4232098,
+    "sha256": "67daf1dd45c9b07c72e4196606341ca598ac9bb4f6f0c04205b9fb9a89c2be9d",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.6.0",
+    "tag": "v0.6.0",
+    "installer": "PureTube_0.6.0_x64-setup.exe",
+    "size": 4253720,
+    "sha256": "30ba65abef6e510e6582017a10be7f973f09e36ebdaeb06b9751b713da68cb0e",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.7.0",
+    "tag": "v0.7.0",
+    "installer": "PureTube_0.7.0_x64-setup.exe",
+    "size": 4277743,
+    "sha256": "2ad58a221ab3fcc5b946e080503fe6e27455b9e7359a550e0c40666606edeb56",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.7.1",
+    "tag": "v0.7.1",
+    "installer": "PureTube_0.7.1_x64-setup.exe",
+    "size": 4273445,
+    "sha256": "f3b165261178360bb92508bb31283b5607146a5361f029cce7178e4cf9d341ea",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.8.0",
+    "tag": "v0.8.0",
+    "installer": "PureTube_0.8.0_x64-setup.exe",
+    "size": 4288335,
+    "sha256": "f57a880aacd94c74f1870be186bcf153a72d25ae6f4fee1412f8a82e1ae22fda",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.8.1",
+    "tag": "v0.8.1",
+    "installer": "PureTube_0.8.1_x64-setup.exe",
+    "size": 4281649,
+    "sha256": "cd963b436c5f5febe28f6833ef6e0fb303e703ac1985ab692885a7d5edb26b1d",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.8.2",
+    "tag": "v0.8.2",
+    "installer": "PureTube_0.8.2_x64-setup.exe",
+    "size": 4284751,
+    "sha256": "deb28dd32ca23a4e425f1cae64ebc20332718563f58aa098df86a30cc6c0edd8",
+    "source": "not-retained"
+  },
+  {
+    "version": "0.9.0",
+    "tag": "v0.9.0",
+    "installer": "PureTube_0.9.0_x64-setup.exe",
+    "size": 4297582,
+    "sha256": "f081415583e5a5c6e2a422442271b298743df07c5ff2e96a4524db5840e1f9a0",
+    "source": "retained"
+  }
+]
