@@ -25,4 +25,7 @@ Var ViddyMigrating
       DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "PureTube"
     ${EndIf}
   ${EndIf}
+  ; Updater mode skips creating links for a newly renamed product.
+  SetShellVarContext current
+  CreateShortcut "$SMPROGRAMS\Viddy.lnk" "$INSTDIR\puretube.exe" "" "$INSTDIR\puretube.exe" 0
 !macroend

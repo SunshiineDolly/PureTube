@@ -44,7 +44,7 @@ function App() {
  const restoreScroll=useRef(0)
  const [notice,setNotice]=useState(''),[reminder,setReminder]=useState('')
  const [text,setText]=useState('')
- const [activeVideo,setActiveVideo]=useState<Video>()
+ const [activeVideo,setActiveVideo]=useState<Video>(),[playbackRun,setPlaybackRun]=useState(0)
  const [playlist,setPlaylist]=useState<PlaylistQueue>();const playlistRef=useRef(playlist);playlistRef.current=playlist
  const [floating,setFloating]=useState<{video:Video;start:number}|null>(null),[returned,setReturned]=useState<{id:string;start:number}>()
  const [focus,setFocus]=useState(false),[theater,setTheater]=useState(false),[session,setSession]=useState(0)
@@ -85,9 +85,9 @@ function App() {
  }
  function playPlaylist(name:string,ids:string[],index=0){
   if(!ids[index])return
-  if(floating)void invoke('close_player');setPlaylist({name,ids,index,repeat:false});go({name:'watch',video:data.savedVideos[ids[index]]??linkVideo(ids[index])})
+  if(floating)void invoke('close_player');setPlaybackRun(n=>n+1);setReturned(undefined);setPlaylist({name,ids,index,repeat:false});go({name:'watch',video:data.savedVideos[ids[index]]??linkVideo(ids[index])})
  }
- function queueWatch(index:number){const q=playlistRef.current;if(!q?.ids[index])return;setPlaylist({...q,index});if(floating)void invoke('close_player');const video=dataRef.current.savedVideos[q.ids[index]]??linkVideo(q.ids[index]);if(route.name==='watch')go({name:'watch',video});else setActiveVideo(video)}
+ function queueWatch(index:number){const q=playlistRef.current;if(!q?.ids[index])return;setPlaybackRun(n=>n+1);setReturned(undefined);setPlaylist({...q,index});if(floating)void invoke('close_player');const video=dataRef.current.savedVideos[q.ids[index]]??linkVideo(q.ids[index]);if(route.name==='watch')go({name:'watch',video});else setActiveVideo(video)}
  function submit(value:string) {
    setPlaylist(undefined)
    const term=value.trim()
@@ -127,7 +127,7 @@ function App() {
    listen<Video>('player-video',({payload:video})=>{setFloating({video,start:0});setActiveVideo(video);setPlaylist(q=>q&&q.ids.includes(video.id)?{...q,index:q.ids.indexOf(video.id)}:undefined);setRoute(old=>old.name==='watch'?{name:'watch',video}:old)}),
    listen<PlaylistQueue|undefined>('player-queue',({payload:q})=>setPlaylist(q??undefined)),
    listen<boolean>('player-autoplay',({payload:enabled})=>change(d=>({...d,settings:{...d.settings,autoplay:enabled}}))),
-   listen<{video:Video;start:number}>('player-closed',({payload:p})=>{setReturned({id:p.video.id,start:p.start??0});setFloating(null)})
+   listen<{video:Video;start:number}>('player-closed',({payload:p})=>{setPlaybackRun(n=>n+1);setReturned({id:p.video.id,start:p.start??0});setFloating(null)})
   ];return()=>{subscriptions.forEach(off=>void off.then(f=>f()))}
  },[])
  const navActive=route.name
@@ -166,7 +166,7 @@ function App() {
  route.name==='subscriptions'?<Subscriptions shared={shared}/>:
  route.name==='channel'?<ChannelPage key={route.id} shared={shared} id={route.id} tab={route.tab} setTab={tab=>setRoute({...route,tab})}/>:
  route.name==='watch'?null:<LibraryPage key={route.name} shared={shared} kind={route.name}/>}
- {activeVideo&&<Watch key={activeVideo.id} video={activeVideo} shared={shared} focus={route.name==='watch'&&focus} theater={theater} setFocus={setFocus} setTheater={setTheater} onSample={noteSample} onElapsed={seconds=>setSession(s=>s+seconds)} playlist={playlist} onQueueWatch={queueWatch} onQueueClose={()=>setPlaylist(undefined)} onQueueRepeat={()=>setPlaylist(q=>q?{...q,repeat:!q.repeat}:q)} docked={route.name!=='watch'} onRestore={()=>go({name:'watch',video:activeVideo})} onStop={()=>{setActiveVideo(undefined);setPlaylist(undefined);if(floating)void invoke('close_player');setFloating(null)}} popped={floating?.video.id===activeVideo.id} returned={returned?.id===activeVideo.id?returned.start:undefined} onPopout={async(video,start)=>{await invoke('open_player',{payload:{video,start,theme:s.theme,accent:s.accent,autoplay:s.autoplay,playlist}});setFloating({video,start})}}/>}
+ {activeVideo&&<Watch key={activeVideo.id+':'+playbackRun} video={activeVideo} shared={shared} focus={route.name==='watch'&&focus} theater={theater} setFocus={setFocus} setTheater={setTheater} onSample={noteSample} onElapsed={seconds=>setSession(s=>s+seconds)} playlist={playlist} onQueueWatch={queueWatch} onQueueClose={()=>setPlaylist(undefined)} onQueueRepeat={()=>setPlaylist(q=>q?{...q,repeat:!q.repeat}:q)} docked={route.name!=='watch'} onRestore={()=>go({name:'watch',video:activeVideo})} onStop={()=>{setActiveVideo(undefined);setPlaylist(undefined);if(floating)void invoke('close_player');setFloating(null)}} popped={floating?.video.id===activeVideo.id} returned={returned?.id===activeVideo.id?returned.start:undefined} onPopout={async(video,start)=>{await invoke('open_player',{payload:{video,start,theme:s.theme,accent:s.accent,autoplay:s.autoplay,playlist}});setFloating({video,start})}}/>}
  {!focus&&route.name!=='settings'&&<footer className="attribution"><button aria-label="Developed with YouTube; open YouTube" onClick={()=>invoke('open_info',{page:'youtube'}).catch(e=>setNotice(errorText(e)))}><img src={s.theme==='dark'?new URL('./youtube-light.png',import.meta.url).href:new URL('./youtube-dark.png',import.meta.url).href} alt="Developed with YouTube"/></button></footer>}
  </main></div>
 }

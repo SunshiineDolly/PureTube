@@ -14,7 +14,8 @@ assert.ok(existsSync(installer)&&/^\d+\.\d+\.\d+$/.test(expected))
 const installDirectory=join(process.env.LOCALAPPDATA,'Programs','PureTube')
 const installed=spawnSync(installer,['/S','/D='+installDirectory],{stdio:'ignore',timeout:90000})
 assert.equal(installed.status,0,'bootstrap installation must succeed')
-const location=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PureTube').InstallLocation"],{encoding:'utf8',windowsHide:true}).trim().replace(/^"|"$/g,'')
+const registration=installer.includes('Viddy_')?'Viddy':'PureTube'
+const location=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"+registration+"').InstallLocation"],{encoding:'utf8',windowsHide:true}).trim().replace(/^"|"$/g,'')
 assert.equal(location.toLowerCase(),installDirectory.toLowerCase(),'the permanent installation must use the requested directory')
 assert.ok(location&&existsSync(join(location,'puretube.exe')),'installed executable must exist')
 const exe=join(location,'puretube.exe')
@@ -38,6 +39,7 @@ try{
  await connect()
  await eventually(()=>value('!!document.querySelector(".sidebar")'))
  const before=await snapshot()
+ if(expected==='0.12.1')execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"Remove-Item -LiteralPath (Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\Viddy.lnk') -ErrorAction SilentlyContinue"],{windowsHide:true})
  const oldVersion=await invoke('plugin:app|version')
  assert.notEqual(oldVersion,expected)
  assert.equal(await invoke('update_configured'),true)
@@ -77,10 +79,11 @@ try{
  assert.equal(await invoke('update_check'),null,'the installed update must recognize it is current')
  const count=Number(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',`@(Get-Process puretube -ErrorAction SilentlyContinue | Where-Object Path -eq '${exe.replaceAll("'","''")}').Count`],{encoding:'utf8',windowsHide:true}).trim())
  assert.equal(count,1,'the updater must restart exactly one app instance')
- if(expected==='0.12.0'){
+ if(expected.startsWith('0.12.')){
   const migration=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"[pscustomobject]@{Old=(Test-Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PureTube');New=(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Viddy').DisplayName;Version=(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Viddy').DisplayVersion} | ConvertTo-Json"],{encoding:'utf8',windowsHide:true}))
   assert.equal(migration.Old,false);assert.equal(migration.New,'Viddy');assert.equal(migration.Version,expected)
   assert.equal(await value("!!document.querySelector('[aria-label=\"Your profile\"]')"),false)
+   const shortcut=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"Test-Path (Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\Viddy.lnk') | ConvertTo-Json"],{encoding:'utf8',windowsHide:true}));assert.equal(shortcut,true,'Viddy must have a Start Menu shortcut after updating')
   console.log('Viddy name migration verified: one installer registration, no old PureTube entry, no profile link.')
  }
  console.log('Updated '+oldVersion+' → '+expected+' through Settings: progress displayed, signature verified, automatic restart succeeded, personal data preserved, one app instance running.')
