@@ -182,7 +182,8 @@ fn lockup_video(lockup: &Value) -> Option<Value> {
             }
         })
         .unwrap_or_default();
-    let name = fields.first().copied().unwrap_or_default();
+    let metric=|s:&str|{let lower=s.trim().to_lowercase();lower.contains(" views")||lower.ends_with(" ago")||(lower.starts_with(|c:char|c.is_ascii_digit())&&lower.chars().all(|c|c.is_ascii_digit()||matches!(c,','|'.'|'k'|'m'|'b'|' ')))};
+    let name = fields.iter().copied().find(|s|!metric(s)).unwrap_or("Creator");
     let owner = find_named(&meta["image"], "showDialogCommand", 20)
         .map(|dialog| json!({"runs":[{"navigationEndpoint":{"showDialogCommand":dialog}}]}))
         .unwrap_or(Value::Null);
@@ -395,8 +396,11 @@ pub async fn watch_creator(state: State<'_, AppData>, id: String) -> Result<Valu
     }
     let url = Url::parse_with_params("https://www.youtube.com/watch", &[("v", id.as_str())])
         .map_err(|_| "Invalid video ID.")?;
+    let html=public_page(&state.client,url).await?;
+    let initial=initial_data(&html).unwrap_or(Value::Null);
+    let subscribers=find_named(&initial,"videoOwnerRenderer",30).map(|owner|text(&owner["subscriberCountText"])).unwrap_or_default();
     let data = embedded_json(
-        &public_page(&state.client, url).await?,
+        &html,
         "var ytInitialPlayerResponse",
     )?;
     let details = &data["videoDetails"];
@@ -409,7 +413,7 @@ pub async fn watch_creator(state: State<'_, AppData>, id: String) -> Result<Valu
         .ok_or("YouTube didn’t return a public creator for this video.")?;
     Ok(
         json!({"id":channel,"name":details["author"].as_str().or_else(||metadata["ownerChannelName"].as_str()).unwrap_or("Creator"),
-       "storyboard":data.pointer("/storyboards/playerStoryboardSpecRenderer/spec").and_then(Value::as_str).unwrap_or_default(),"date":metadata["publishDate"].as_str().unwrap_or_default(),"title":details["title"].as_str().unwrap_or_default(),
+       "subscribers":subscribers,"storyboard":data.pointer("/storyboards/playerStoryboardSpecRenderer/spec").and_then(Value::as_str).unwrap_or_default(),"date":metadata["publishDate"].as_str().unwrap_or_default(),"title":details["title"].as_str().unwrap_or_default(),
        "live":is_live(&data),"upcoming":data["videoDetails"]["isUpcoming"]==true,"embeddable":data["playabilityStatus"]["playableInEmbed"]!=false,"description":details["shortDescription"].as_str().unwrap_or_default(),"views":details["viewCount"].as_str().map(|v|format!("{v} views")).unwrap_or_default(),"duration":details["lengthSeconds"].as_str().and_then(|v|v.parse::<u64>().ok()).unwrap_or(0)}),
     )
 }

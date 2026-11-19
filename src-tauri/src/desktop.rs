@@ -1,6 +1,7 @@
 #[cfg(windows)]
 pub fn configure_youtube_identity(
     webview: tauri::webview::PlatformWebview,
+    on_video: Option<Box<dyn Fn(String) + Send + Sync>>,
 ) -> windows_core::Result<()> {
     use webview2_com::{
         take_pwstr, AddScriptToExecuteOnDocumentCreatedCompletedHandler,
@@ -17,9 +18,14 @@ pub fn configure_youtube_identity(
         )?;
         let mut popup_token = 0;
         core.add_NewWindowRequested(
-            &NewWindowRequestedEventHandler::create(Box::new(|_, args| {
+            &NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
                 if let Some(args) = args {
                     args.SetHandled(true)?;
+                    let mut uri = PWSTR::null();
+                    args.Uri(&mut uri)?;
+                    if let Some(id) = embedded_video_id(&take_pwstr(uri)) {
+                        if let Some(callback) = &on_video { callback(id); }
+                    }
                 }
                 Ok(())
             })),
@@ -56,6 +62,18 @@ pub fn configure_youtube_identity(
         )?;
     }
     Ok(())
+}
+
+fn embedded_video_id(raw: &str) -> Option<String> {
+    let url = reqwest::Url::parse(raw).ok()?;
+    if url.scheme() != "https" { return None; }
+    let id = match url.host_str()? {
+        "youtu.be" => url.path().trim_start_matches('/').to_owned(),
+        "youtube.com" | "www.youtube.com" | "m.youtube.com" if url.path() == "/watch" => url.query_pairs().find(|(k,_)| k=="v")?.1.into_owned(),
+        "youtube.com" | "www.youtube.com" if url.path().starts_with("/live/") => url.path().trim_start_matches("/live/").to_owned(),
+        _ => return None,
+    };
+    (id.len()==11 && id.bytes().all(|b|b.is_ascii_alphanumeric()||b==b'_'||b==b'-')).then_some(id)
 }
 
 pub fn configure_tray(app: &tauri::App) -> tauri::Result<()> {

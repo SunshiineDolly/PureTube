@@ -15,7 +15,7 @@ use std::{
     sync::Mutex,
     time::Duration,
 };
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_opener::OpenerExt;
@@ -243,6 +243,8 @@ fn main() {
         popout::player_queue,
         downloads::download_list,
         downloads::download_video,
+        downloads::preview_stream,
+        downloads::preview_stream,
         downloads::download_cancel,
         downloads::open_downloads,
         comments::video_comments,
@@ -334,12 +336,7 @@ fn main() {
             } else {
                 {
                     let folder = app.path().download_dir()?;
-                    let legacy = folder.join("PureTube");
-                    if dir.join("downloads.json").exists() && legacy.exists() {
-                        legacy
-                    } else {
-                        folder.join("Viddy")
-                    }
+                    folder.join("ViddyVids")
                 }
             };
             app.manage(downloads::Downloads::new(
@@ -362,8 +359,9 @@ fn main() {
             #[cfg(windows)]
             if let Some(main) = app.get_webview_window("main") {
                 main.set_decorations(false)?;
-                main.with_webview(|webview| {
-                    let _ = desktop::configure_youtube_identity(webview);
+                let video_app = app.handle().clone();
+                main.with_webview(move |webview| {
+                    let _ = desktop::configure_youtube_identity(webview, Some(Box::new(move |id| { let _ = video_app.emit_to("main", "embedded-video", id); })));
                 })?;
             }
             Ok(())

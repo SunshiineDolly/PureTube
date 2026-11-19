@@ -51,7 +51,7 @@ try{
  await value('document.querySelector(".up-next-queue:not(:disabled)").click()')
  await eventually(()=>value('!!document.querySelector(".viddy-toast")'))
  await eventually(()=>value('!document.querySelector(".viddy-toast")'),6000)
- await value('[...document.querySelectorAll(".watch-view-controls button")].find(b=>b.textContent.includes("More from this creator")).click()')
+ await value('document.querySelector(".watch-creator .byline button").click()')
  await eventually(()=>value('!!document.querySelector(".channel-page")||!!document.querySelector(".channel-profile")||document.body.innerText.includes("Past streams")'))
  assert.ok(await value('!!document.querySelector(".back")'))
  await value('document.querySelector(".back").click()')

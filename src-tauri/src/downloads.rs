@@ -64,6 +64,7 @@ impl Downloads {
             .as_str()
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
+            .filter(|p|{let legacy=root.parent().map(|base|[base.join("PureTube"),base.join("Viddy")]);!legacy.is_some_and(|paths|paths.contains(p))})
             .unwrap_or_else(|| root.clone());
         let quality = preferences["quality"]
             .as_u64()
@@ -282,6 +283,25 @@ fn prepare(
         }
     }
     Ok(executables)
+}
+#[tauri::command]
+pub async fn preview_stream(app: tauri::AppHandle, id: String) -> Result<String> {
+    if id.len()!=11 || !id.bytes().all(|b|b.is_ascii_alphanumeric()||b==b'_'||b==b'-') { return Err("Invalid video.".into()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        let state=app.state::<Downloads>();
+        let tools=prepare(&app,&state,"preview")?;
+        let mut command=Command::new(&tools["yt-dlp.exe"]);
+        command.args(["--ignore-config","--no-playlist","--no-warnings","--no-cache-dir","--check-formats","--socket-timeout","8","--retries","0","--extractor-retries","0","--match-filter","!is_live & !is_upcoming","--get-url","--js-runtimes",&format!("deno:{}",tools["deno.exe"].display()),"-f","bv[height<=720][ext=mp4]/b[height<=720][ext=mp4]","--",&format!("https://www.youtube.com/watch?v={id}")]);
+        #[cfg(windows)]
+        command.creation_flags(0x08000000);
+        let output=command.output().map_err(|_|"Preview could not start.")?;
+        if !output.status.success(){return Err("A smooth preview is not available for this video.".into());}
+        let raw=String::from_utf8_lossy(&output.stdout);
+        for line in raw.lines(){if let Ok(url)=reqwest::Url::parse(line.trim()){
+            if url.scheme()=="https"&&url.host_str().is_some_and(|h|h.ends_with(".googlevideo.com")){return Ok(url.to_string());}
+        }}
+        Err("A smooth preview is not available for this video.".into())
+    }).await.map_err(|_|"Preview could not be prepared.")?
 }
 fn worker(app: tauri::AppHandle, id: String) -> Result<()> {
     let state = app.state::<Downloads>();

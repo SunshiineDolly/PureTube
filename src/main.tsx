@@ -15,7 +15,7 @@ import {Preferences} from './settings'
 import {Heading,Quiet,Subscriptions,ChannelPage,LibraryPage,Notice,type ChannelTab,type Shared} from './screens'
 import {PlayerFrame} from './player'
 import {useLibrary} from './hooks'
-import {channelId,errorText,visible,type Video} from './domain'
+import {videoId,channelId,errorText,visible,type Video} from './domain'
 import {linkVideo,parseVideo,usePublicFeeds} from './public-feeds'
 import {rememberVideo,toggled} from './library'
 import {Discover,RecommendationFeed} from './discover'
@@ -24,7 +24,7 @@ import {categoryFor} from './topics'
 import {SearchPage,type SearchSource} from './search'
 import {LibraryStudio} from './library-studio'
 import type {PlaylistQueue} from './playlist-queue'
-import {BrandMark} from './brand'
+import {BrandLockup} from './brand'
 import {CreatorAvatar} from './creator-avatar'
 import {SearchBar} from './search-bar'
 import {WindowControls} from './window-controls'
@@ -43,6 +43,7 @@ function App() {
  const {data,ready,failed,error,change,setting}=useLibrary(), s=data.settings
  const [route,setRoute]=useState<Route>({name:'home'}), routes=useRef<{route:Route;text:string;scroll:number}[]>([])
  const restoreScroll=useRef(0)
+ const routeRef=useRef(route);routeRef.current=route
  const [notice,setNotice]=useState(''),[reminder,setReminder]=useState('')
  const [text,setText]=useState('')
  const [activeVideo,setActiveVideo]=useState<Video>(),[playbackRun,setPlaybackRun]=useState(0)
@@ -71,6 +72,10 @@ function App() {
    restoreScroll.current=0
  },[route])
  function go(next:Route) {
+   if(next.name==='watch'&&route.name==='watch'&&next.video.id===route.video.id)return
+   if(next.name==='channel'&&route.name==='channel'&&next.id===route.id&&next.tab===route.tab)return
+   if(next.name==='watch'&&route.name==='watch'&&next.video.id===route.video.id)return
+   if(next.name==='channel'&&route.name==='channel'&&next.id===route.id)return
    if(next.name===route.name&&next.name!=='search'&&next.name!=='watch'&&next.name!=='channel')return
    if(next.name==='watch')setActiveVideo(next.video)
    if(next.name==='watch')void invoke('close_original_player').catch(()=>{})
@@ -122,6 +127,7 @@ function App() {
  }
  useEffect(()=>{
   const subscriptions=[
+   listen<string>('embedded-video',({payload:id})=>{if(!videoId(id))return;const previous=routeRef.current;if(previous.name==='watch'&&previous.video.id===id)return;routes.current.push({route:previous,text:previous.name==='search'?previous.query:'',scroll:main.current?.scrollTop??0});setPlaylist(undefined);setPlaybackRun(n=>n+1);setActiveVideo(linkVideo(id));setRoute({name:'watch',video:linkVideo(id)})}),
    listen<{video:Video;position:number;duration:number;elapsed:number;started:boolean}>('player-sample',({payload:p})=>{
     if(p.started&&dataRef.current.settings.history)change(d=>{const topic=categoryFor(p.video);return {...d,history:{...d.history,[p.video.id]:Date.now()},interests:topic?{...d.interests,[topic]:(d.interests[topic]??0)+1}:d.interests}})
     if(!p.started){noteSample(p.video.id,p.position,p.duration,p.elapsed,!!p.video.live);setSession(s=>s+p.elapsed);setFloating(old=>old?{...old,start:p.position}:old)}
@@ -136,7 +142,7 @@ function App() {
  const liveChannels=followIds.filter(id=>!!followedLive.states[id]?.video&&!followedLive.states[id]?.error)
  const sidebarFollows=[...liveChannels,...followIds.filter(id=>!liveChannels.includes(id))]
  return <div className={'app '+(s.collapsed?'collapsed ':'')+(s.density==='compact'?'compact':'')}>
- {notice&&<div className="viddy-toast" role="status" key={notice}><span aria-hidden="true">✦</span>{notice}</div>}<BrandIntro enabled={ready&&s.intro}/><header className="top" data-tauri-drag-region><div className="header-brand" data-tauri-drag-region>{true&&<button className="icon top-menu" aria-label={s.collapsed?'Expand sidebar':'Collapse sidebar'} aria-expanded={!s.collapsed} disabled={!ready} onClick={()=>setting('collapsed',!s.collapsed)}><Menu size={23}/></button>}<button className="brand" aria-label="Viddy Home" onClick={()=>go({name:'home'})}><BrandMark/><span>Viddy<sup aria-hidden="true">✦</sup></span></button></div>
+ {notice&&<div className="viddy-toast" role="status" key={notice}><span aria-hidden="true">✦</span>{notice}</div>}<BrandIntro enabled={ready&&s.intro}/><header className="top" data-tauri-drag-region><div className="header-brand" data-tauri-drag-region>{true&&<button className="icon top-menu" aria-label={s.collapsed?'Expand sidebar':'Collapse sidebar'} aria-expanded={!s.collapsed} disabled={!ready} onClick={()=>setting('collapsed',!s.collapsed)}><Menu size={23}/></button>}<button className="brand" aria-label="Viddy Home" onClick={()=>go({name:'home'})}><BrandLockup/></button></div>
  <div className="header-center" data-tauri-drag-region>{ <SearchBar inputRef={searchRef} ready={ready} text={text} setText={setText} submit={submit}/>}</div>
  <div className="header-actions">{true&&<>
  <button className="icon theme" aria-label={'Switch to '+(s.theme==='dark'?'light':'dark')+' theme'} disabled={!ready} onClick={()=>setting('theme',s.theme==='dark'?'light':'dark')}>{s.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button>
@@ -167,7 +173,7 @@ function App() {
  route.name==='subscriptions'?<Subscriptions shared={shared}/>:
  route.name==='channel'?<ChannelPage key={route.id} shared={shared} id={route.id} tab={route.tab} setTab={tab=>setRoute({...route,tab})}/>:
  route.name==='watch'?null:<LibraryPage key={route.name} shared={shared} kind={route.name}/>}
- {activeVideo&&<Watch key={activeVideo.id+':'+playbackRun} video={activeVideo} shared={shared} theater={theater} setTheater={setTheater} onSample={noteSample} onElapsed={seconds=>setSession(s=>s+seconds)} playlist={playlist} onQueueWatch={queueWatch} onQueueClose={()=>setPlaylist(undefined)} onQueueRepeat={()=>setPlaylist(q=>q?{...q,repeat:!q.repeat}:q)} docked={route.name!=='watch'} onRestore={()=>go({name:'watch',video:activeVideo})} onStop={()=>{setActiveVideo(undefined);setPlaylist(undefined);if(floating)void invoke('close_player');setFloating(null)}} popped={floating?.video.id===activeVideo.id} returned={returned?.id===activeVideo.id?returned.start:undefined} onPopout={async(video,start)=>{await invoke('open_player',{payload:{video,start,theme:s.theme,accent:s.accent,autoplay:s.autoplay,playlist}});setFloating({video,start})}}/>}
+ {activeVideo&&<Watch key={activeVideo.id+':'+playbackRun} video={activeVideo} shared={shared} theater={theater} setTheater={setTheater} onSample={noteSample} onElapsed={seconds=>setSession(s=>s+seconds)} playlist={playlist} onQueueChange={q=>{if(playlist?.name&&playlist.name!=='Queue')change(d=>playlist.name==='Favorites'?{...d,favorites:q?.ids??[]}:{...d,collections:d.collections.map(c=>c.name===playlist.name?{...c,ids:q?.ids??[]}:c)});setPlaylist(q);if(q&&q.ids[q.index]!==activeVideo.id){const video=data.savedVideos[q.ids[q.index]]??linkVideo(q.ids[q.index]);setPlaybackRun(n=>n+1);if(route.name==='watch')go({name:'watch',video});else setActiveVideo(video)}}} onQueueWatch={queueWatch} onQueueClose={()=>setPlaylist(undefined)} onQueueRepeat={()=>setPlaylist(q=>q?{...q,repeat:!q.repeat}:q)} docked={route.name!=='watch'} onRestore={()=>{let previous=-1;for(let i=routes.current.length-1;i>=0;i--)if(routes.current[i].route.name==='watch'&&(routes.current[i].route as {video:Video}).video.id===activeVideo.id){previous=i;break}if(previous>=0){const entry=routes.current[previous];routes.current=routes.current.slice(0,previous);restoreScroll.current=entry.scroll;setRoute({name:'watch',video:activeVideo})}else go({name:'watch',video:activeVideo})}} onStop={()=>{setActiveVideo(undefined);setPlaylist(undefined);if(floating)void invoke('close_player');setFloating(null)}} popped={floating?.video.id===activeVideo.id} returned={returned?.id===activeVideo.id?returned.start:undefined} onPopout={async(video,start)=>{await invoke('open_player',{payload:{video,start,theme:s.theme,accent:s.accent,autoplay:s.autoplay,playlist}});setFloating({video,start})}}/>}
  {true&&route.name!=='settings'&&<footer className="attribution"><button aria-label="Developed with YouTube; open YouTube" onClick={()=>invoke('open_info',{page:'youtube'}).catch(e=>setNotice(errorText(e)))}><img src={s.theme==='dark'?new URL('./youtube-light.png',import.meta.url).href:new URL('./youtube-dark.png',import.meta.url).href} alt="Developed with YouTube"/></button></footer>}
  </main></div>
 }

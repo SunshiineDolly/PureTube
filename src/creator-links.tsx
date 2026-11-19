@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
 import {channelId,errorText,type CreatorCredit,type Video} from './domain'
 
-type WatchCreator=CreatorCredit&{title:string;date:string;live:boolean;upcoming?:boolean;embeddable:boolean;description?:string;views?:string;duration?:number;storyboard?:string}
+type WatchCreator=CreatorCredit&{title:string;date:string;live:boolean;upcoming?:boolean;embeddable:boolean;description?:string;views?:string;duration?:number;storyboard?:string;subscribers?:string}
 const lookedUp=new Map<string,{task:Promise<WatchCreator>;expires:number}>()
 export function lookupCreator(id:string){
  const cached=lookedUp.get(id)
@@ -35,9 +35,11 @@ export function creditList(v:Video){
 }
 export function CreatorByline({video,onChannel}:{video:Video;onChannel:(id:string)=>void}){
  const credits=creditList(video)
- const [busy,setBusy]=useState(false),[error,setError]=useState('')
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[resolved,setResolved]=useState<CreatorCredit>()
+ const metric=(label:string)=>/^\d[\d.,]*\s*[KMB]?(?:\s+views)?$/i.test(label.trim())||label==='Creator'
+ useEffect(()=>{if(!credits.some(c=>metric(c.name)))return;let active=true;void lookupCreator(video.id).then(c=>{if(active)setResolved(c)},()=>{});return()=>{active=false}},[video.id])
  return <div className="byline">
-   {credits.length?credits.map((credit,i)=><span key={credit.id}>{i>0?' · ':''}<button type="button" onClick={()=>onChannel(credit.id)}>{credit.name}</button></span>):
+   {credits.length?credits.map((original,i)=>{const credit=resolved&&resolved.id===original.id?resolved:original;return <span key={credit.id}>{i>0?' · ':''}<button type="button" onClick={()=>onChannel(credit.id)}>{credit.name}</button></span>}):
    <button type="button" disabled={busy} onClick={()=>{
      setBusy(true);setError('')
      void lookupCreator(video.id).then(c=>onChannel(c.id),e=>setError(errorText(e))).finally(()=>setBusy(false))

@@ -46,9 +46,10 @@ pub async fn open_player(
     .build()
     .map_err(|_| "Could not open the mini player.")?;
     #[cfg(windows)]
+    let video_app = app.clone();
     window
-        .with_webview(|view| {
-            let _ = crate::desktop::configure_youtube_identity(view);
+        .with_webview(move |view| {
+            let _ = crate::desktop::configure_youtube_identity(view, Some(Box::new(move |id| { let _ = video_app.emit_to("player", "embedded-video", id); })));
         })
         .map_err(|_| "Could not initialize the mini player.")?;
     Ok(())

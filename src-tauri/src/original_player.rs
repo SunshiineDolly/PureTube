@@ -40,7 +40,7 @@ pub async fn original_player(app: tauri::AppHandle, id: String, dark: bool) -> R
     #[cfg(windows)]
     window
         .with_webview(|v| {
-            let _ = crate::desktop::configure_youtube_identity(v);
+            let _ = crate::desktop::configure_youtube_identity(v, None);
         })
         .map_err(|_| "Could not initialize YouTube playback.")?;
     Ok(())

@@ -1,7 +1,7 @@
-import {RefreshCw} from 'lucide-react'
+import {RefreshCw,Volume2,VolumeX} from 'lucide-react'
 import {useEffect,useRef,useState} from 'react'
 import {playbackClock} from './playback-clock'
-type Player = {destroy():void;getCurrentTime():number;getDuration():number;getPlayerState():number;getVideoUrl():string;loadVideoById(id:string):void;seekTo(position:number,allow:boolean):void}
+type Player = {destroy():void;getCurrentTime():number;getDuration():number;getPlayerState():number;getVideoUrl():string;getVolume():number;setVolume(volume:number):void;isMuted():boolean;mute():void;unMute():void;loadVideoById(id:string):void;seekTo(position:number,allow:boolean):void}
 type Events = {onReady:()=>void;onError:(e:{data:number})=>void;onStateChange:(e:{data:number})=>void}
 declare global { interface Window { YT?:{Player:new (frame:HTMLIFrameElement, config:{events:Events})=>Player};onYouTubeIframeAPIReady?:()=>void } }
 let api:Promise<NonNullable<Window['YT']>>|undefined
@@ -16,13 +16,16 @@ function playerApi() {
    document.head.appendChild(script)
  }).catch(e=>{api=undefined;throw e}) as Promise<NonNullable<Window['YT']>>
 }
-export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,sampleInterval=8}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;onVideoChange?:(id:string)=>void;sampleInterval?:number}) {
+export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,volumeControls=false,sampleInterval=8}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;onVideoChange?:(id:string)=>void;sampleInterval?:number;volumeControls?:boolean}) {
  const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange})
  const initial=useRef(start)
  const resume=useRef(start),seekWhenReady=useRef(()=>{})
  resume.current=start
  useEffect(()=>{seekWhenReady.current()},[start])
- const [error,setError]=useState('')
+ const [error,setError]=useState(''),[volume,setVolume]=useState(100),[muted,setMuted]=useState(false)
+ const volumePlayer=useRef<Player|undefined>(undefined)
+ function adjustVolume(value:number){const p=volumePlayer.current;if(!p)return;p.setVolume(value);if(value>0)p.unMute();setVolume(value);setMuted(value===0);try{localStorage.setItem('viddy-volume',String(value))}catch{}}
+ function toggleMute(){const p=volumePlayer.current;if(!p)return;if(muted||volume===0){if(volume===0){p.setVolume(50);setVolume(50)}p.unMute();setMuted(false)}else{p.mute();setMuted(true)}}
  const [liveState,setLiveState]=useState<'connecting'|'playing'|'paused'|'buffering'|'ended'>('connecting')
  const jump=useRef<()=>void>(()=>{})
  callbacks.current={onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange}
@@ -73,7 +76,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
    playerApi().then(YT=>{
      if(closed) return
      player=new YT.Player(frame,{events:{
-       onReady:()=>{ready=true;sample();callbacks.current.onController?.(()=>player?.getCurrentTime()??0);seekWhenReady.current()},
+       onReady:()=>{ready=true;volumePlayer.current=player;let initialVolume=player?.getVolume()??100;try{const saved=localStorage.getItem('viddy-volume');if(saved!==null&&Number.isFinite(Number(saved))){initialVolume=Math.max(0,Math.min(100,Number(saved)));player?.setVolume(initialVolume)}}catch{};setVolume(initialVolume);setMuted((player?.isMuted()??false)||initialVolume===0);sample();callbacks.current.onController?.(()=>player?.getCurrentTime()??0);seekWhenReady.current()},
        onStateChange:e=>{
          if(closed)return
          if(e.data===1&&player){try{const selected=new URL(player.getVideoUrl()).searchParams.get('v');if(selected&&/^[\w-]{11}$/.test(selected)&&selected!==id){callbacks.current.onVideoChange?.(selected);return}}catch{}}
@@ -101,9 +104,9 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
    }
    if(live)document.addEventListener('visibilitychange',visibility)
    window.addEventListener('pagehide',flush)
-   return ()=>{closed=true;jump.current=()=>{};seekWhenReady.current=()=>{};document.removeEventListener('visibilitychange',visibility);window.removeEventListener('pagehide',flush);clearInterval(timer);flush();player?.destroy();host.replaceChildren()}
+   return ()=>{closed=true;volumePlayer.current=undefined;jump.current=()=>{};seekWhenReady.current=()=>{};document.removeEventListener('visibilitychange',visibility);window.removeEventListener('pagehide',flush);clearInterval(timer);flush();player?.destroy();host.replaceChildren()}
  },[id,live])
- return <><div className="player" ref={mount}/>{live&&!error&&<div className="live-control row">
+ return <><div className="player" ref={mount}/>{volumeControls&&<div className="compact-volume"><button className="icon" aria-label={muted?'Unmute video':'Mute video'} title={muted?'Unmute':'Mute'} onClick={toggleMute}>{muted?<VolumeX size={16}/>:<Volume2 size={16}/>}</button><input type="range" min={0} max={100} value={muted?0:volume} aria-label="Video volume" onChange={e=>adjustVolume(Number(e.target.value))}/><output>{muted?0:volume}%</output></div>}{live&&!error&&<div className="live-control row">
    <span role="status">{liveState==='ended'?'Stream ended':liveState==='paused'?'Paused':liveState==='buffering'?'Buffering live stream…':liveState==='playing'?'Live stream':'Connecting to live stream…'}</span>
    {liveState!=='ended'&&<button className="button" title="Reconnect to the current live position" onClick={()=>jump.current()}><RefreshCw size={14}/> Resync live</button>}
  </div>}{error&&<p role="status" className="notice">{error}</p>}</>
