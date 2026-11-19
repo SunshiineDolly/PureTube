@@ -2,7 +2,7 @@
 param([Parameter(Mandatory)][string]$NotesPath)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-$name = 'SunshiineDolly/PureTube'
+$name = 'SunshiineDolly/Viddy'
 $api = "https://api.github.com/repos/$name"
 $version = (Get-Content (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version
 $tag = "v$version"

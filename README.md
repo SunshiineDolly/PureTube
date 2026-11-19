@@ -2,7 +2,7 @@
 
 Viddy (formerly PureTube) is a Windows desktop app for watching recent uploads from the YouTube channels you follow. Public feeds and the official embedded player work without a Google sign-in or API key.
 
-[Download the latest Windows version](https://github.com/SunshiineDolly/PureTube/releases/latest) · [All releases](https://github.com/SunshiineDolly/PureTube/releases)
+[Download the latest Windows version](https://github.com/SunshiineDolly/Viddy/releases/latest) · [All releases](https://github.com/SunshiineDolly/Viddy/releases)
 
 ## Install and start
 

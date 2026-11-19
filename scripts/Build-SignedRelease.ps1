@@ -5,7 +5,7 @@ param(
  [string]$PasswordFile=(Join-Path $env:LOCALAPPDATA 'PureTube\signing\password.dpapi'),
  [string]$NotesPath,
  [switch]$BundleOnly,
- [uri]$FeedUrl='https://github.com/SunshiineDolly/PureTube/releases/latest/download/latest.json',
+ [uri]$FeedUrl='https://github.com/SunshiineDolly/Viddy/releases/latest/download/latest.json',
  [uri]$AssetBaseUrl
 )
 $ErrorActionPreference='Stop'
@@ -19,7 +19,7 @@ $config=Get-Content -LiteralPath (Join-Path $repo 'src-tauri/tauri.conf.json') -
 $version=$config.version
 if(!$NotesPath){$NotesPath=Join-Path $repo "releases/v$version.md"}
 $notes=if(Test-Path -LiteralPath $NotesPath){Get-Content -LiteralPath $NotesPath -Raw}else{"PureTube $version update."}
-if(!$AssetBaseUrl){$AssetBaseUrl=[uri]"https://github.com/SunshiineDolly/PureTube/releases/download/v$version/"}
+if(!$AssetBaseUrl){$AssetBaseUrl=[uri]"https://github.com/SunshiineDolly/Viddy/releases/download/v$version/"}
 foreach($url in @($FeedUrl,$AssetBaseUrl)){
  if(!$url.IsAbsoluteUri -or $url.Scheme -ne 'https' -or $url.UserInfo -or $url.Fragment -or $url.Query){throw 'Use public HTTPS URLs without embedded credentials, query parameters, or fragments.'}
 }

@@ -69,7 +69,7 @@
       },
       "requireSignedVersion": true,
       "endpoints": [
-        "https://github.com/SunshiineDolly/PureTube/releases/latest/download/latest.json"
+        "https://github.com/SunshiineDolly/Viddy/releases/latest/download/latest.json"
       ]
     }
   }
