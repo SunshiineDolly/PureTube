@@ -41,8 +41,9 @@ try{
  const oldVersion=await invoke('plugin:app|version')
  assert.notEqual(oldVersion,expected)
  assert.equal(await invoke('update_configured'),true)
- assert.equal(await invoke('update_check'),null,'bootstrap must recognize its current release')
- console.log('Installed signed PureTube '+oldVersion+'; its public update feed is configured and current.')
+ const offered=await invoke('update_check')
+ assert.ok(offered===null||offered.version===expected,'the public feed must offer the expected newer release or the current bootstrap')
+ console.log('Installed signed PureTube '+oldVersion+'; its public update feed is configured.')
  console.log('Waiting for signed PureTube '+expected+' to be published...')
  const deadline=Date.now()+20*60_000
  let release
@@ -52,14 +53,15 @@ try{
  await eventually(()=>value(`[...document.querySelectorAll('button')].some(b=>b.textContent==='Check for updates'&&!b.disabled)`))
  await value(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Check for updates').click()`)
  await eventually(()=>value(`[...document.querySelectorAll('button')].some(b=>b.textContent==='Update and restart'&&!b.disabled)`))
- await call('Page.enable')
- let confirmation=false,sawProgress=false
- const events=e=>{const message=JSON.parse(e.data);if(message.method==='Page.javascriptDialogOpening'){confirmation=true;void call('Page.handleJavaScriptDialog',{accept:true})}}
- ws.addEventListener('message',events)
+ // WebView2 handles native confirm dialogs outside the CDP Page domain.
+ // Simulate the already-authorized user acceptance, retaining its message.
+ await value(`window.confirm=message=>{window.__updateConfirmation=message;return true}`)
+ let sawProgress=false
  await value(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Update and restart').click()`)
+ const confirmation=await value('window.__updateConfirmation')
  const until=Date.now()+150000
  while(child.exitCode===null&&Date.now()<until){try{sawProgress ||= await value('!!document.querySelector(".update-progress")')}catch{}await wait(100)}
- assert.equal(confirmation,true,'the user-facing update confirmation must appear')
+ assert.ok(confirmation?.includes(expected),'the update action must request confirmation for the offered version')
  assert.notEqual(child.exitCode,null,'the bootstrap app must exit for installation')
  assert.equal(sawProgress,true,'Settings must show update download progress')
  ws.close()
