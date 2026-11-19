@@ -1,3 +1,4 @@
+import {BrandIntro} from './brand-intro'
 import {Watch} from './watch'
 import {applyPalette} from './palettes'
 import {createRoot} from 'react-dom/client'
@@ -8,7 +9,7 @@ import {Download,PictureInPicture2} from 'lucide-react'
 import {DownloadButton,DownloadsPage} from './downloads'
 import {MiniPlayer} from './mini-player'
 import {useUpNext,UpNext} from './up-next'
-import {ArrowLeft, Bookmark, Clock3, Compass, History, House, Maximize, Menu, Minimize, Moon, Radio, Settings as Gear, Sun, UserRound, Users, X, Heart, Share2} from 'lucide-react'
+import {ArrowRight,ArrowLeft, Bookmark, Clock3, Compass, History, House, Maximize, Menu, Minimize, Moon, Radio, Settings as Gear, Sun, UserRound, Users, X, Heart, Share2} from 'lucide-react'
 import {clock,day,Empty,Loading} from './components'
 import {Preferences} from './settings'
 import {Heading,Quiet,Subscriptions,ChannelPage,LibraryPage,Notice,type ChannelTab,type Shared} from './screens'
@@ -36,7 +37,7 @@ import './studio.css'
 
 type Name='home'|'discover'|'following'|'subscriptions'|'library'|'later'|'history'|'settings'|'downloads'
 type Route={name:Name}|{name:'search';query:string;source?:SearchSource}|{name:'live';query?:string;mode?:'live'|'scheduled'}|{name:'channel';id:string;tab?:ChannelTab}|{name:'watch';video:Video}
-const nav = [{id:'home',name:'Home',Icon:House},{id:'discover',name:'Discover',Icon:Compass},{id:'following',name:'Following',Icon:Users},{id:'live',name:'Live',Icon:Radio},{id:'subscriptions',name:'Manage follows',Icon:Users},{id:'library',name:'Library',Icon:Bookmark},{id:'later',name:'Watch Later',Icon:Clock3},{id:'history',name:'History',Icon:History},{id:'settings',name:'Settings',Icon:Gear}] as const
+const nav = [{id:'home',name:'Home',Icon:House},{id:'discover',name:'Discover',Icon:Compass},{id:'following',name:'Following',Icon:Users},{id:'live',name:'Live',Icon:Radio},{id:'subscriptions',name:'Manage channels',Icon:Users},{id:'library',name:'Library',Icon:Bookmark},{id:'later',name:'Watch Later',Icon:Clock3},{id:'history',name:'History',Icon:History},{id:'settings',name:'Settings',Icon:Gear}] as const
 const localDate=()=>new Date().toLocaleDateString('en-CA')
 function App() {
  const {data,ready,failed,error,change,setting}=useLibrary(), s=data.settings
@@ -56,6 +57,7 @@ function App() {
  const feeds=usePublicFeeds(ready?followIds.filter(id=>!s.blocked.includes(id)):[])
  const followedLive=useFollowedLive(ready?followIds.filter(id=>!s.blocked.includes(id)):[])
  useEffect(()=>applyPalette(s.theme,s.accent),[s.theme,s.accent])
+ useEffect(()=>{document.documentElement.dataset.cursor=s.themedCursor?'themed':'system'},[s.themedCursor])
  useEffect(()=>setText(''),[route])
  useEffect(()=>{
    const key=(e:KeyboardEvent)=>{
@@ -134,7 +136,7 @@ function App() {
  const liveChannels=followIds.filter(id=>!!followedLive.states[id]?.video&&!followedLive.states[id]?.error)
  const sidebarFollows=[...liveChannels,...followIds.filter(id=>!liveChannels.includes(id))]
  return <div className={'app '+(s.collapsed?'collapsed ':'')+(focus?'focus ':'')+(s.density==='compact'?'compact':'')}>
- <header className="top" data-tauri-drag-region><div className="header-brand" data-tauri-drag-region>{!focus&&<button className="icon top-menu" aria-label={s.collapsed?'Expand sidebar':'Collapse sidebar'} aria-expanded={!s.collapsed} disabled={!ready} onClick={()=>setting('collapsed',!s.collapsed)}><Menu size={23}/></button>}<button className="brand" aria-label="Viddy Home" onClick={()=>go({name:'home'})}><BrandMark/><span>Viddy<sup aria-hidden="true">✦</sup></span></button></div>
+ <BrandIntro enabled={ready&&s.intro}/><header className="top" data-tauri-drag-region><div className="header-brand" data-tauri-drag-region>{!focus&&<button className="icon top-menu" aria-label={s.collapsed?'Expand sidebar':'Collapse sidebar'} aria-expanded={!s.collapsed} disabled={!ready} onClick={()=>setting('collapsed',!s.collapsed)}><Menu size={23}/></button>}<button className="brand" aria-label="Viddy Home" onClick={()=>go({name:'home'})}><BrandMark/><span>Viddy<sup aria-hidden="true">✦</sup></span></button></div>
  <div className="header-center" data-tauri-drag-region>{focus?<div className="focus-bar"><span>Focus Player</span><button className="button" onClick={()=>setFocus(false)}><Minimize size={16}/> Exit focus</button></div>:
  <SearchBar inputRef={searchRef} ready={ready} text={text} setText={setText} submit={submit}/>}</div>
  <div className="header-actions">{!focus&&<>
@@ -146,7 +148,7 @@ function App() {
  {!focus&&<aside className="sidebar"><nav aria-label="Main navigation">{nav.filter(item=>["home","discover","following","live"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}</nav>
  <div className="sidebar-section"><p className="sidebar-section-label">You</p><nav aria-label="Your library">{nav.filter(item=>["library","later","history"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}<button aria-label="Downloads" className={route.name==='downloads'?'selected':''} onClick={()=>go({name:'downloads'})}><Download size={19}/><span>Downloads</span></button></nav></div>
  <div className="sidebar-section"><nav aria-label="Manage Viddy">{nav.filter(item=>["subscriptions","settings"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}</nav></div>
- {!s.collapsed&&followIds.length>0&&<nav className="sidebar-follows" aria-label="Followed creators"><p>Following</p>{sidebarFollows.slice(0,5).map(id=>{const name=feeds.states[id]?.feed?.title??id;const broadcast=followedLive.states[id];const liveNow=broadcast?.video&&!broadcast.error;return <button key={id} title={liveNow?name+' — live now':name} onClick={()=>go({name:'channel',id})}><CreatorAvatar id={id} name={name}/><span className="follow-name">{name}</span>{liveNow&&<span className="sidebar-live">LIVE</span>}</button>})}{followIds.length>5&&<button onClick={()=>go({name:'subscriptions'})}><span>Show all follows</span></button>}</nav>}
+ {!s.collapsed&&followIds.length>0&&<nav className="sidebar-follows" aria-label="Followed creators"><p>Channels you follow <span className="following-count">{followIds.length}</span></p>{sidebarFollows.slice(0,5).map(id=>{const name=feeds.states[id]?.feed?.title??id;const broadcast=followedLive.states[id];const liveNow=broadcast?.video&&!broadcast.error;return <button key={id} title={liveNow?name+' — live now':name} onClick={()=>go({name:'channel',id})}><CreatorAvatar id={id} name={name}/><span className="follow-name">{name}</span>{liveNow&&<span className="sidebar-live">LIVE</span>}</button>})}{followIds.length>5&&<button onClick={()=>go({name:'subscriptions'})}><span>View all channels</span><ArrowRight size={14}/></button>}</nav>}
  <div className="sidebar-footer">{s.showTime&&<p title="Playback time since Viddy opened" data-session-seconds={Math.floor(session)}><Clock3 size={16}/><span>{clock(session)} this session</span></p>}
  <span className="sidebar-flourish" aria-hidden="true">✧</span></div></aside>}
  <main ref={main} className="content" id="main-content">

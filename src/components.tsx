@@ -14,11 +14,12 @@ export function AutoMore({enabled,busy=false,onReach,error}:{enabled:boolean;bus
  const sentinel=useRef<HTMLDivElement>(null)
  useEffect(()=>{
    if(!enabled||busy||error||!sentinel.current)return
-   const observer=new IntersectionObserver(entries=>{
-     if(entries.some(e=>e.isIntersecting)){observer.disconnect();onReach()}
-   },{rootMargin:'420px'})
-   observer.observe(sentinel.current)
-   return ()=>observer.disconnect()
+   const node=sentinel.current,scroller=node.closest('.content');let fired=false
+   const reach=()=>{if(fired)return;fired=true;observer.disconnect();onReach()}
+   const check=()=>{if(!node.getClientRects().length)return;const bounds=node.getBoundingClientRect(),bottom=scroller?.getBoundingClientRect().bottom??innerHeight;if(bounds.top<=bottom+420)reach()}
+   const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))reach()},{rootMargin:'420px'})
+   observer.observe(node);scroller?.addEventListener('scroll',check,{passive:true});window.addEventListener('resize',check);check()
+   return ()=>{observer.disconnect();scroller?.removeEventListener('scroll',check);window.removeEventListener('resize',check)}
  },[enabled,busy,onReach,error])
  if(!enabled&&!error)return null
  return <div className="more auto-more" ref={sentinel} data-scroll-sentinel role="status">{busy?<><LoaderCircle className="spin" size={16}/> Loading videos…</>:error?<><span>{error}</span><button className="button" onClick={onReach}>Try again</button></>:null}</div>

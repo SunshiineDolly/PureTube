@@ -52,3 +52,7 @@ test('public watch-page recommendations outrank generic matches while keeping wa
  const data=empty(),current=video('current0000','current','Music'),generic=video('generic0000','a','Travel'),related=video('related0000','b','Travel'),watched=video('watched0000','c','Music');data.history[watched.id]=Date.now()
  assert.deepEqual(nextVideos(current,[generic,related,watched],data,[],[related.id,watched.id]).map(v=>v.id),[related.id,generic.id])
 })
+
+test('scrolling recommendations can grow beyond 24 without repeating IDs',()=>{
+ const items=Array.from({length:80},(_,i)=>video(String(i).padStart(11,'0'),'creator'+(i%20)));const result=nextVideos(video('current0000'),items,empty(),[],[],Infinity);assert.equal(result.length,80);assert.equal(new Set(result.map(v=>v.id)).size,80)
+})

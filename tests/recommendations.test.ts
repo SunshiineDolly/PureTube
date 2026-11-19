@@ -44,3 +44,7 @@ test('turning off history also stops using retained interests to select query so
  const data=empty(),plain=empty();data.interests.Gaming=15;data.settings.history=false;plain.settings.history=false
  assert.deepEqual(recommendationPlan(data,'home',104),recommendationPlan(plain,'home',104))
 })
+
+test('Home combines learned topics and known followed creators with exploration',()=>{
+ const data=empty();data.interests.Gaming=12;data.interests.Food=10;const saved=video(80,'followed');saved.channel='Creator I follow';data.follows=['followed'];data.savedVideos[saved.id]=saved;const plan=recommendationPlan(data,'home',104);assert.ok(plan.some(s=>s.query.includes(saved.channel)));assert.ok(plan.some(s=>s.topic==='Gaming'));assert.ok(plan.some(s=>s.topic==='Food'));assert.ok(plan.length>=5)
+})

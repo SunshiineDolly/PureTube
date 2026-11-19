@@ -68,7 +68,7 @@ export function Subscriptions({shared}:{shared:Shared}) {
      setLookup('')
    }catch(e){setError(errorText(e))}finally{setBusy(false)}
  }
- return <><Heading label="YOUR CREATORS" title="Manage follows" detail="Add the creators you watch. Following in Viddy stays on this PC."/>
+ return <><Heading label="YOUR CREATORS" title="Manage channels" detail="Add the creators you watch. Following in Viddy stays on this PC."/>
  <form className="filter-row" onSubmit={e=>{e.preventDefault();void add()}}><input aria-label="Channel ID or link" placeholder="Channel ID or link" value={lookup} onChange={e=>setLookup(e.target.value)}/><button className="button" disabled={busy||!lookup.trim()}><Plus size={16}/> {busy?'Checking...':'Follow'}</button></form>
  {error&&<Notice text={error}/>}
  {!ids.length?<Empty title="No visible subscriptions" detail="Paste a YouTube channel ID or channel feed link. On YouTube, open the channel’s About panel, then choose Share channel and Copy channel ID."/>:

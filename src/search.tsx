@@ -1,3 +1,4 @@
+import {LiveBrowser} from './live-browser'
 import {useEffect,useRef,useState} from 'react'
 import {AutoMore,Empty,Loading} from './components'
 import {RecentFeed} from './discover'
@@ -13,7 +14,7 @@ export function SearchPage({query,shared,liveOnly=false,selectedSource,onSourceC
  const source:CatalogFilter|'feeds'=liveOnly?mode:selectedSource??'latest'
  const [draft,setDraft]=useState(liveQuery)
  const effective=liveOnly?liveQuery||(mode==='scheduled'?'upcoming live stream':query):query
- const catalog=useCatalog(effective,source==='feeds'?'latest':source,source!=='feeds')
+ const catalog=useCatalog(effective,source==='feeds'?'latest':source,source!=='feeds'&&(!liveOnly||!!liveQuery))
  const reload=useRef(catalog.reload);reload.current=catalog.reload
  useEffect(()=>{
    if(!liveOnly)return
@@ -23,9 +24,10 @@ export function SearchPage({query,shared,liveOnly=false,selectedSource,onSourceC
  const matches=catalog.items?.filter(v=>visible(v,shared.data.settings))
  if(source==='latest')matches?.sort(publicNewest)
  if(source==='scheduled')matches?.sort((a,b)=>(a.scheduledAt??0)-(b.scheduledAt??0))
+ if(liveOnly&&!liveQuery)return <LiveBrowser shared={shared} mode={mode} onMode={onMode} onSearch={onLiveQuery}/>
  return <div className="studio-discover">
    <Heading label={liveOnly?'ON AIR':'SEARCH'} title={liveOnly?'Live streams':'Search results'} detail={liveOnly?'Find a public stream and watch it here.':`Videos matching “${query}”`}/>
-   {liveOnly&&<FollowedLiveShelf shared={shared}/>}
+   {liveOnly&&<><button className="button" onClick={()=>onLiveQuery?.('')}>Browse all streams</button><FollowedLiveShelf shared={shared}/></>}
    {liveOnly?<><div className="row search-banner" aria-label="Live filters">{(['live','scheduled'] as const).map(value=><button className="category-chip" key={value} aria-pressed={mode===value} onClick={()=>onMode?.(value)}>{value==='live'?'Live now':'Scheduled'}</button>)}</div><form className="row search-banner" onSubmit={e=>{e.preventDefault();onLiveQuery?.(draft.trim())}}>
      <input aria-label="Search live streams" placeholder="Try lofi radio, gaming, or news" maxLength={256} value={draft} onChange={e=>setDraft(e.target.value)}/>
      <button className="button accent">Find streams</button>

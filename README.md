@@ -18,6 +18,9 @@ The browsing layout uses a bright play-mark wordmark, icon category pills, group
 
 ## Everyday use
 
+Up next now loads additional recommendation pages automatically beside comments, keeps recommendations visible while a queue is open, and offers Add to queue on each item. The docked player includes a labeled Return to video button. Home balances recent viewing interests and known followed creators with exploration. Live now and Scheduled each browse several categories by default, with category filtering, public search, scrolling pagination, and periodic refresh.
+
+
 - **Library playlists** have cover cards, Play all, Shuffle, rename/delete, add-by-link, filtering, sorting, drag reordering, and move-up/down controls. Collections from older versions become playlists automatically. Playlist playback has previous/next, repeat, and automatic advancement.
 - **In-app mini player** keeps the same player alive when you browse away from a video. Restore or close it, and open its queue. Add videos to the queue from browsing cards. The separate pop-out remains available. Both players avoid page scrollbars.
 - **Unwatched recommendations** exclude videos in history or saved progress, deduplicate titles, and mix related topics, creators, and public YouTube watch-page recommendations. Manually selected playlists can intentionally replay saved videos.

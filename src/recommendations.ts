@@ -1,5 +1,5 @@
 import {unique,visible,type Video} from './domain.ts'
-import {rankedTopics,topicQuery,topics} from './topics.ts'
+import {rankedTopics,topicQuery,topics,categoryFor} from './topics.ts'
 import type {Library} from './library.ts'
 
 export type Surface='home'|'discover'
@@ -24,13 +24,19 @@ export function recommendationPlan(data:Library,surface:Surface,seed:number){
  const preferred=[...topics.filter(t=>data.preferredTopics.includes(t.name)),...(data.settings.history?ranked.filter(t=>(data.interests[t.name]??0)>0):[])].filter((t,i,a)=>a.findIndex(x=>x.name===t.name)===i).slice(0,10)
  const shuffled=[...topics].sort((a,b)=>hash(surface+seed+a.name)-hash(surface+seed+b.name))
  const chosen=unique([
-   ...(preferred.length?[{...preferred[seed%preferred.length],id:preferred[seed%preferred.length].name}]:[]),
+   ...Array.from({length:Math.min(surface==='home'?2:1,preferred.length)},(_,i)=>{const t=preferred[(seed+i)%preferred.length];return {...t,id:t.name}}),
    ...shuffled.map(t=>({...t,id:t.name})),
  ]).slice(0,4)
- return chosen.map((t,index)=>{
+ const plan:{topic:string;query:string;filter:'all'|'latest'}[]=chosen.map((t,index)=>{
    const options=alternatives[t.name]??[topicQuery(t.name),topicQuery(t.name)+' documentary',topicQuery(t.name)+' ideas']
    return {topic:t.name,query:options[(seed+index)%options.length],filter:(index%2===0?'all':'latest') as 'all'|'latest'}
  })
+ if(surface==='home'){
+  const remembered=Object.values(data.savedVideos).filter(v=>v.channel&&((data.settings.history&&data.history[v.id])||data.follows.includes(v.channelId))).sort((a,b)=>(data.history[b.id]??0)-(data.history[a.id]??0))
+  const creators=[...new Map(remembered.map(v=>[v.channelId||v.channel,v])).values()]
+  for(let i=0;i<Math.min(2,creators.length);i++){const v=creators[(seed+i)%creators.length];plan.push({topic:categoryFor(v)??'From creators you watch',query:v.channel+' latest videos',filter:'latest'})}
+ }
+ return plan
 }
 
 export function rankRecommendations(items:Video[],data:Library,seen:Record<string,number>,seed:number,excluded:Set<string>,limit=48){
@@ -42,7 +48,7 @@ export function rankRecommendations(items:Video[],data:Library,seen:Record<strin
    const affinity=(v.category&&data.preferredTopics.includes(v.category)?22:0)+(data.settings.history&&v.category?Math.min(data.interests[v.category]??0,15):0)
    const label=v.publishedLabel?.toLowerCase()??''
    const fresh=/\b(?:\d+\s*(?:h|hr|hour|d|day|w|wk|week)s?)\s+ago\b/.test(label)?18:0
-   return hash(seed+v.id)%100+affinity+fresh-penalty
+   return hash(seed+v.id)%35+affinity*2+fresh+Number(data.follows.includes(v.channelId))*25-penalty
  }
  candidates.sort((a,b)=>score(b)-score(a))
  const counts=new Map<string,number>(),titles=new Set<string>(),result:Video[]=[]

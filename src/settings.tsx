@@ -17,12 +17,12 @@ export function Preferences({data,setting,change,updates}:{data:Library;setting:
  const s=data.settings,[message,setMessage]=useState(''),[autostart,setAutostart]=useState(false),[blocked,setBlocked]=useState(''),[busy,setBusy]=useState(false)
  useEffect(()=>{invoke<boolean>('startup',{enabled:null}).then(setAutostart).catch(e=>setMessage(errorText(e)))},[])
  async function action(fn:()=>Promise<void>) {setBusy(true);setMessage('');try{await fn()}catch(e){setMessage(errorText(e))}finally{setBusy(false)}}
- const toggle=(k:'collapsed'|'history'|'progress'|'showTime'|'focus'|'tray'|'autoplay',label:string)=><Toggle label={label} value={s[k]} onChange={v=>setting(k,v)}/>
+ const toggle=(k:'collapsed'|'history'|'progress'|'showTime'|'focus'|'tray'|'autoplay'|'intro'|'themedCursor'|'playerProgress',label:string)=><Toggle label={label} value={s[k]} onChange={v=>setting(k,v)}/>
  return <div className="settings">
  {message&&<p className="notice sticky" role="status">{message}</p>}
  <section><h2><Palette/> Appearance</h2><label>Theme <select value={s.theme} onChange={e=>setting('theme',e.target.value as Settings['theme'])}><option value="dark">Dark</option><option value="light">Light</option></select></label>
  <div className="palette-options" role="group" aria-label="Color palette">{accents.map(accent=><button key={accent} type="button" className="palette-option" data-theme={s.theme} data-accent={accent} style={paletteStyle(s.theme,accent)} aria-pressed={s.accent===accent} onClick={()=>setting('accent',accent)}><span className="palette-preview" aria-hidden="true"><i/><i/><i/></span>{palettes[s.theme][accent]}</button>)}</div>
- <label>Thumbnail density <select value={s.density} onChange={e=>setting('density',e.target.value as Settings['density'])}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>{toggle('collapsed','Collapse sidebar')}</section>
+ <label>Thumbnail density <select value={s.density} onChange={e=>setting('density',e.target.value as Settings['density'])}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>{toggle('collapsed','Collapse sidebar')}{toggle('themedCursor','Use Viddy’s themed cursor')}{toggle('intro','Play the Viddy intro on launch')}<button className="button" disabled={!s.intro} onClick={()=>window.dispatchEvent(new Event('viddy-intro'))}>Preview intro</button></section>
  <section><h2><SlidersHorizontal/> Content filters</h2>
  <p>Blocked phrases match titles and descriptions, ignoring case.</p>
  <TextList label="Block a word or phrase" values={s.keywords} onChange={v=>setting('keywords',v)}/> <form className="row" onSubmit={e=>{e.preventDefault();void action(async()=>{const id=parseChannel(blocked);if(!id) throw new Error('Enter a valid channel ID or channel link.');setting('blocked',[...new Set([...s.blocked,id])]);setBlocked('')})}}><input aria-label="Channel to block" placeholder="Block a channel by ID or link" value={blocked} onChange={e=>setBlocked(e.target.value)}/><button className="button" disabled={busy||!blocked.trim()}>Block</button></form>
@@ -30,7 +30,7 @@ export function Preferences({data,setting,change,updates}:{data:Library;setting:
  <p>Viddy excludes Shorts that YouTube identifies in its public results, links, or creator tags.</p>
  </section>
  <section><h2><PlaySquare/> Playback</h2><p>Videos start when selected. Use the player’s controls for playback or fullscreen. YouTube may show ads and related videos inside its player.</p>
- {toggle('autoplay','Autoplay recommendations after a video ends')}{toggle('focus','Open videos in Focus Player')}{toggle('progress','Track playback progress')}{toggle('showTime','Show viewing time this session')}
+ {toggle('autoplay','Autoplay recommendations after a video ends')}{toggle('focus','Open videos in Focus Player')}{toggle('progress','Track playback progress')}{toggle('playerProgress','Show Viddy’s themed seek bar')}{toggle('showTime','Show viewing time this session')}
  <label>Daily viewing reminder (minutes; 0 disables) <input type="number" min="0" max="1440" value={s.reminder} onChange={e=>setting('reminder',Math.min(1440,Math.max(0,Math.floor(Number(e.target.value)||0))))}/></label>
  </section>
  <section><h2><Shield/> Privacy and library</h2>{toggle('history','Track watch history')}<p>Follows, watch history, progress, collections, and preferences are kept on this PC. Google receives requests for public search, feeds, thumbnails, and playback.</p>
