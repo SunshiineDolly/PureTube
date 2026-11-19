@@ -52,6 +52,23 @@ try{
   assert.ok(page,'Viddy WebView should start')
   socket=new WebSocket(page.webSocketDebuggerUrl)
   await new Promise((ok,fail)=>{socket.addEventListener('open',ok,{once:true});socket.addEventListener('error',fail,{once:true})})
+  for(let i=0;i<60;i++){
+    if(await evaluate("typeof window.__TAURI_INTERNALS__?.invoke==='function' && !!document.querySelector('.top-menu:not(:disabled)')"))break
+    if(i===59)throw Error('Viddy did not finish starting')
+    await wait(200)
+  }
+  if(process.env.VIDDY_CHECK_PUBLIC_SCHEDULE==='1'){
+    const publicSchedule=await evaluate(`(async()=>{
+      const responses=await Promise.allSettled(['@NASA','@NFL','@FIDE_chess','@capcomfighters'].map(channel=>
+        window.__TAURI_INTERNALS__.invoke('scheduled_channel',{channel})))
+      return responses.map(result=>result.status==='fulfilled'
+        ?result.value.filter(item=>item.upcoming&&!item.live&&item.scheduledAt).length
+        :String(result.reason))
+    })()`)
+    assert.ok(publicSchedule.filter(count=>typeof count==='number'&&count>0).length>=2,
+      'Expected dated upcoming broadcasts on multiple public creator pages: '+JSON.stringify(publicSchedule))
+    console.log('Upcoming broadcasts found on public creator pages: '+JSON.stringify(publicSchedule))
+  }else{
   // Evaluate the same room code used by the app, with two independent WebRTC peers.
   const code=stripTypeScriptTypes(readFileSync('src/room-connection.ts','utf8')).replace(/^export /gm,'')
   const playback=await evaluate(`(async()=>{
@@ -137,6 +154,7 @@ try{
   })()`)
   assert.ok(reminder,'A saved reminder should appear without a matching public search result')
   console.log('Scheduled reminders appeared from storage independently of the public catalog.')
+  }
 }finally{
   socket?.close()
   if(child.exitCode===null)child.kill()

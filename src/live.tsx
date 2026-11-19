@@ -8,22 +8,22 @@ import type {Video} from './domain'
 type LiveStatus='live'|'waiting'|'ended'|'unknown'
 type StreamStatus={status:LiveStatus;start?:string}
 const pending=new Map<string,Promise<StreamStatus>>()
-function checkLive(id:string){
+export function checkLive(id:string){
  let task=pending.get(id)
  if(!task){task=invoke<StreamStatus>('live_status',{id,details:true}).catch(()=>({status:'unknown' as const})).finally(()=>pending.delete(id));pending.set(id,task)}
  return task
 }
 
-export function useScheduledStatus(id:string,at?:number|null){
+export function useScheduledStatus(id:string,at?:number|null,upcoming=false){
  const [status,setStatus]=useState<LiveStatus>('waiting')
  useEffect(()=>{
-   if(!at)return
+   if(!at&&!upcoming)return
    let active=true
-   const poll=()=>{if(Date.now()>=at-60_000)void checkLive(id).then(({status})=>{if(active&&status!=='unknown')setStatus(status)})}
+   const poll=()=>{if(!at||Date.now()>=at-60_000)void checkLive(id).then(({status})=>{if(active&&status!=='unknown')setStatus(status)})}
    poll()
    const timer=setInterval(poll,15_000)
    return ()=>{active=false;clearInterval(timer)}
- },[id,at])
+ },[id,at,upcoming])
  return status
 }
 
@@ -85,7 +85,8 @@ export function ScheduledDetails({video,data,change,status='waiting'}:{video:Vid
  const [now,setNow]=useState(Date.now)
  const at=data.liveReminders[video.id]?.at??video.scheduledAt
  useEffect(()=>{if(!at||status!=='waiting')return;const timer=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(timer)},[at,status])
- if(!at||status!=='waiting')return null
+ if(status!=='waiting')return null
+ if(!at)return video.upcoming?<div className="schedule-details"><strong>Start time not posted yet</strong></div>:null
  const seconds=Math.ceil(Math.max(0,at-now)/1000),d=Math.floor(seconds/86400),h=Math.floor(seconds/3600)%24,m=Math.floor(seconds/60)%60,s=seconds%60
  const count=d>0?`${d}d ${h}h ${m}m`:h>0?`${h}h ${m}m ${s}s`:`${m}m ${s}s`
  const saved=!!data.liveReminders[video.id]

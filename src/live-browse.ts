@@ -1,38 +1,70 @@
 import {useEffect,useRef,useState} from 'react'
+import {invoke} from '@tauri-apps/api/core'
 import {requestCatalog,type CatalogPage} from './catalog'
 import {type Video} from './domain'
 import {mixLive} from './live-mix'
+import {checkLive} from './live'
 
 export const liveTopics=[['Gaming','gaming'],['Music','music concert'],['News','news'],['Travel & IRL','walking tour travel'],['Nature','wildlife nature'],['Sports','sports'],['Food','cooking'],['Chat & podcasts','podcast talk'],['Space','space telescope'],['Art & study','drawing study'],['Technology','technology coding'],['Animals','animals aquarium'],['Fitness','fitness workout'],['Events','events festival'],['Learning','education lecture'],['International','international world']] as const
 type Mode='live'|'scheduled'
-type Source={topic:string;query:string;next:CatalogPage['next'];loaded:boolean;head:Video[];tail:Video[];tailAt:number}
+type Source={topic:string;query:string;channel?:string;next:CatalogPage['next'];loaded:boolean;head:Video[];tail:Video[];tailAt:number}
 
-function makeSources(mode:Mode,category:string):Source[]{
+const eventChannels=[
+ ['Sports','@NFL'],['Gaming','@capcomfighters'],['Space','@NASA'],['News','@CBCNews'],
+ ['Sports','@FIDE_chess'],['Space','@NASASpaceflight'],['Music','@KEXP'],['Learning','@Harvard'],
+ ['Gaming','@lolesports'],['News','@unitednations'],['Animals','@montereybayaquarium'],
+ ['Sports','@NHL'],['Music','@WFMT'],['Space','@EuropeanSpaceAgency'],['News','@PBSNewsHour'],
+ ['Events','@TheKennedyCenter'],['Art & study','@britishmuseum'],['Fitness','@YogaWithAdriene'],
+] as const
+
+function makeSources(mode:Mode,category:string,follows:string[]):Source[]{
  const topics=category?liveTopics.filter(([name])=>name===category):liveTopics
  const variants=mode==='scheduled'?['upcoming live','live event scheduled','livestream premiere']:['live stream','live now','livestream']
- return variants.flatMap((suffix,index)=>topics.map(([topic,query])=>({
+ const searches=variants.flatMap((suffix,index)=>topics.map(([topic,query])=>({
    topic,
    query:mode==='scheduled'&&topic==='Gaming'&&index===0?'vtuber upcoming live':query+' '+suffix,
    loaded:false,next:null,head:[],tail:[],tailAt:0,
  })))
+ if(mode==='live')return searches
+ const creator=(topic:string,channel:string):Source=>({topic,channel,query:'',loaded:false,next:null,head:[],tail:[],tailAt:0})
+ const listings=eventChannels.filter(([topic])=>!category||category===topic).map(([topic,channel])=>creator(topic,channel))
+ const followed=category?[]:follows.map(id=>creator('Following',id))
+ return [...listings.slice(0,6),...followed.slice(0,2),...searches.slice(0,2),
+   ...listings.slice(6),...searches.slice(2),...followed.slice(2)]
 }
 
 type View={key:string;items:Video[];busy:boolean;hasMore:boolean;error:string}
-export function useLiveBrowse(mode:Mode,category:string){
+export function useLiveBrowse(mode:Mode,category:string,followIds:string[]){
  const key=mode+':'+category
+ const followedKey=mode==='scheduled'?followIds.slice(0,30).join(','):''
  const [view,setView]=useState<View>({key,items:[],busy:true,hasMore:true,error:''})
  const actions=useRef({more:()=>{},refresh:()=>{}})
  useEffect(()=>{
-   const sources=makeSources(mode,category)
+   const sources=makeSources(mode,category,followedKey?followedKey.split(','):[])
    let active=true,working=false,refreshIndex=0,moreIndex=0
-   const items=()=>mixLive(sources.flatMap(s=>[...s.head,...(Date.now()-s.tailAt<180_000?s.tail:[])]),mode,category)
+   const statuses=new Map<string,{checked:number;remove:boolean;start?:number}>()
+   const items=()=>{
+     const now=Date.now()
+     const rows=sources.flatMap(s=>[...s.head,...(now-s.tailAt<180_000?s.tail:[])])
+     if(mode==='live')return mixLive(rows,mode,category)
+     const upcoming=rows.flatMap(video=>{
+       const state=statuses.get(video.id)
+       if(state?.remove)return []
+       const start=state?.start??video.scheduledAt
+       if(start&&start<now-7_200_000)return []
+       return [{...video,scheduledAt:start}]
+     }).sort((a,b)=>(a.scheduledAt??Infinity)-(b.scheduledAt??Infinity))
+     return mixLive(upcoming,mode,category)
+   }
    const available=()=>sources.some(s=>!s.loaded||s.next)
    const render=(busy:boolean,error='')=>{
      if(active)setView({key,items:items(),busy,hasMore:available(),error})
    }
    async function load(source:Source,fresh:boolean){
      const cursor=fresh?null:source.next
-     const page=await requestCatalog(source.query,mode,cursor,fresh)
+     const page=source.channel
+       ?{items:await invoke<Video[]>('scheduled_channel',{channel:source.channel}),next:null}
+       :await requestCatalog(source.query,mode,cursor,fresh)
      if(!active)return
      const rows=page.items.map(v=>({...v,category:source.topic}))
      if(cursor){
@@ -42,9 +74,23 @@ export function useLiveBrowse(mode:Mode,category:string){
        source.next=page.next?.token!==cursor.token?page.next:null
      }else{
        source.head=rows
-       if(!source.loaded)source.next=page.next
+       if(!source.loaded||!source.tailAt)source.next=page.next
      }
      source.loaded=true
+   }
+   async function updateSchedule(){
+     if(mode!=='scheduled'||!active)return
+     const now=Date.now()
+     const due=items().filter(v=>!v.scheduledAt||v.scheduledAt<=now+60_000)
+       .filter(v=>now-(statuses.get(v.id)?.checked??0)>=(v.scheduledAt?25_000:180_000)).slice(0,5)
+     await Promise.all(due.map(async video=>{
+       const previous=statuses.get(video.id)
+       const result=await checkLive(video.id)
+       if(!active)return
+       const start=Date.parse(result.start??'')
+       statuses.set(video.id,{checked:now,remove:result.status==='live'||result.status==='ended',
+         start:result.status==='waiting'&&Number.isFinite(start)?start:previous?.start})
+     }))
    }
    async function batch(list:Source[],fresh:boolean){
      const results=await Promise.allSettled(list.map(source=>load(source,fresh)))
@@ -72,11 +118,16 @@ export function useLiveBrowse(mode:Mode,category:string){
      try{
        const loaded=sources.filter(s=>s.loaded)
        const candidates=loaded.length?loaded:sources
-       const start=refreshIndex%candidates.length,size=initial?(category?3:8):4
-       const group=candidates.slice(start).concat(candidates.slice(0,start)).slice(0,size)
+       if(!candidates.length){render(false);return}
+       const start=refreshIndex%candidates.length,size=initial?(category?4:10):mode==='scheduled'?7:4
+       const rolling=candidates.slice(start).concat(candidates.slice(0,start))
+       const hot=mode==='scheduled'&&!initial?candidates.filter(source=>source.head.length&&source.channel).slice(0,3):[]
+       const group=[...new Set([...hot,...rolling])].slice(0,size)
        refreshIndex+=group.length
        const worked=await batch(group,true)
        render(false,!worked&&!items().length?'Could not refresh streams. Try again in a moment.':'')
+       await updateSchedule()
+       if(mode==='scheduled')render(false)
      }finally{working=false}
    }
    actions.current={more:()=>void more(),refresh:()=>void refresh()}
@@ -85,7 +136,7 @@ export function useLiveBrowse(mode:Mode,category:string){
    const focus=()=>void refresh()
    window.addEventListener('focus',focus)
    return ()=>{active=false;clearInterval(timer);window.removeEventListener('focus',focus)}
- },[key,mode,category])
+ },[key,mode,category,followedKey])
  const current=view.key===key?view:{items:[],busy:true,hasMore:true,error:''}
  return {...current,more:()=>actions.current.more(),refresh:()=>actions.current.refresh()}
 }

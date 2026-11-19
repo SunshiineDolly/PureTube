@@ -2,7 +2,7 @@ import {unique,type Video} from './domain.ts'
 export function mixLive(items:Video[],mode:'live'|'scheduled',category:string){
  const genres=new Map<string,Map<string,Video[]>>()
  for(const v of unique(items)){
-   if(mode==='live'?!v.live:!v.scheduledAt||v.live)continue
+   if(mode==='live'?!v.live:(!v.scheduledAt&&!v.upcoming)||v.live)continue
    const genre=category||v.category||'Other',creators=genres.get(genre)??new Map<string,Video[]>(),creator=v.channelId||v.channel||v.id
    creators.set(creator,[...(creators.get(creator)??[]),v]);genres.set(genre,creators)
  }

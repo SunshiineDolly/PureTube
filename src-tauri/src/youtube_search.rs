@@ -221,7 +221,8 @@ fn lockup_video(lockup: &Value) -> Option<Value> {
         return None;
     }
     let live = styles.iter().any(|s| s.ends_with("_LIVE"));
-    let upcoming = styles.iter().any(|s| s.ends_with("_UPCOMING"));
+    let scheduled_at = scheduled_time(lockup);
+    let upcoming = scheduled_at.is_some() || styles.iter().any(|s| s.ends_with("_UPCOMING"));
     let duration = badges
         .into_iter()
         .flatten()
@@ -236,9 +237,16 @@ fn lockup_video(lockup: &Value) -> Option<Value> {
     Some(
         json!({"id":id,"title":title,"channelId":channel,"channel":name,"creators":creators,
         "previewImage":animated_thumbnail(lockup,18),"channelImage":find_avatar(&meta["image"],14).unwrap_or_default(),"description":"","date":"","publishedLabel":label,"views":views,
-        "duration":duration,"live":live,"upcoming":upcoming,"shorts":false,"paid":false,"embeddable":true,
+        "duration":duration,"live":live,"upcoming":upcoming,"scheduledAt":scheduled_at,"shorts":false,"paid":false,"embeddable":true,
         "image":thumbnail(&lockup["contentImage"]["thumbnailViewModel"]["image"]["sources"],id)}),
     )
+}
+
+fn scheduled_time(item: &Value) -> Option<u64> {
+    let event = find_named(item, "upcomingEventData", 14)?;
+    let start = &event["startTime"];
+    let seconds = start.as_u64().or_else(|| start.as_str()?.parse().ok())?;
+    (seconds > 0 && seconds < 4_500_000_000).then(|| seconds * 1000)
 }
 
 fn channel_key(value: &Value) -> Option<&str> {
@@ -315,11 +323,7 @@ fn video(renderer: &Value) -> Option<Value> {
         return None;
     }
     let upcoming = renderer.get("upcomingEventData").is_some();
-    let scheduled_at = renderer["upcomingEventData"]["startTime"]
-        .as_str()
-        .and_then(|s| s.parse::<u64>().ok())
-        .filter(|s| (1_000_000_000..=4_500_000_000).contains(s))
-        .map(|s| s * 1000);
+    let scheduled_at = scheduled_time(renderer);
     let description = text(&renderer["detailedMetadataSnippets"][0]["snippetText"]);
     let duration = text(&renderer["lengthText"])
         .split(':')
@@ -467,6 +471,9 @@ fn embedded_json(html: &str, variable: &str) -> Result<Value> {
                 .trim_start()
                 .strip_prefix('=')?
                 .trim_start();
+            if let Some(quoted) = value.strip_prefix('\'') {
+                return escaped_payload(quoted);
+            }
             serde_json::Deserializer::from_str(value)
                 .into_iter::<Value>()
                 .next()?
@@ -474,6 +481,38 @@ fn embedded_json(html: &str, variable: &str) -> Result<Value> {
         })
         .next()
         .ok_or_else(|| "YouTube didn’t return readable results.".into())
+}
+
+// YouTube also assigns its initial data as a single-quoted JavaScript string
+// and parses it in a later script. Decode the string without running that script.
+fn escaped_payload(input: &str) -> Option<Value> {
+    let mut chars = input.chars();
+    let mut json_string = String::from("\"");
+    while let Some(c) = chars.next() {
+        match c {
+            '\'' => {
+                json_string.push('"');
+                let decoded: String = serde_json::from_str(&json_string).ok()?;
+                return serde_json::from_str(&decoded).ok();
+            }
+            '"' => json_string.push_str("\\\""),
+            '\\' => match chars.next()? {
+                'x' => {
+                    json_string.push_str("\\u00");
+                    for _ in 0..2 {
+                        json_string.push(chars.next().filter(char::is_ascii_hexdigit)?);
+                    }
+                }
+                '\'' => json_string.push('\''),
+                escaped => {
+                    json_string.push('\\');
+                    json_string.push(escaped);
+                }
+            },
+            other => json_string.push(other),
+        }
+    }
+    None
 }
 
 fn search_sections(data: &Value) -> Result<&Vec<Value>> {
@@ -491,6 +530,7 @@ fn result_items(item: &Value, depth: u8) -> Vec<Value> {
     if let Some(v) = item
         .get("videoRenderer")
         .and_then(video)
+        .or_else(|| item.get("compactVideoRenderer").and_then(video))
         .or_else(|| item.get("lockupViewModel").and_then(lockup_video))
     {
         return vec![v];
@@ -508,7 +548,9 @@ fn result_items(item: &Value, depth: u8) -> Vec<Value> {
             .flat_map(|child| result_items(child, depth - 1))
             .collect();
     }
-    if let Some(content) = item.pointer("/richItemRenderer/content") {
+    if let Some(content) = item.pointer("/richItemRenderer/content")
+        .or_else(|| item.pointer("/richSectionRenderer/content"))
+    {
         return result_items(content, depth - 1);
     }
     if let Some(shelf) = item.get("shelfRenderer") {
@@ -534,13 +576,54 @@ fn search_items(sections: &[Value], filter: &str) -> Vec<Value> {
         .filter(|item| {
             (match filter {
                 "live" => item["live"] == true,
-                "scheduled" => {
-                    item["upcoming"] == true && item["live"] != true && item["scheduledAt"].is_u64()
-                }
+                "scheduled" => item["upcoming"] == true && item["live"] != true,
                 _ => item["live"] != true && item["upcoming"] != true,
             }) && seen.insert(item["id"].as_str().unwrap_or_default().to_owned())
         })
         .collect()
+}
+
+#[tauri::command]
+pub async fn scheduled_channel(state: State<'_, AppData>, channel: String) -> Result<Vec<Value>> {
+    let is_id = channel.starts_with("UC") && valid_id(&channel, 24);
+    let is_handle = channel.strip_prefix('@').is_some_and(|handle| {
+        (3..=40).contains(&handle.len())
+            && handle.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b))
+    });
+    let path = if is_id { format!("channel/{channel}") } else if is_handle {
+        channel
+    } else { return Err("Invalid YouTube channel.".into()); };
+    // The public mobile Streams view includes upcoming cards that the desktop
+    // Streams grid often leaves out.
+    let url = Url::parse(&format!("https://m.youtube.com/{path}/streams"))
+        .map_err(|_| "Invalid YouTube channel.")?;
+    let html = read_page(state.client.get(url)
+        .header(reqwest::header::ACCEPT, "text/html")
+        .header(reqwest::header::USER_AGENT, "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"))
+        .await?;
+    let data = initial_data(&html)?;
+    let meta = &data["metadata"]["channelMetadataRenderer"];
+    let id = channel_key(&meta["externalId"]).unwrap_or_default();
+    let name = meta["title"].as_str().unwrap_or_default();
+    let photo = channel_photo(&data);
+    let contents = &data["contents"];
+    let selected = ["twoColumnBrowseResultsRenderer", "singleColumnBrowseResultsRenderer"]
+        .into_iter()
+        .find_map(|layout| contents[layout]["tabs"].as_array())
+        .into_iter().flatten().map(|tab| &tab["tabRenderer"])
+        .find(|tab| tab["selected"] == true);
+    let rows = selected.and_then(|tab| {
+        tab.pointer("/content/richGridRenderer/contents").and_then(Value::as_array)
+    });
+    Ok(search_items(rows.map(Vec::as_slice).unwrap_or_default(), "scheduled")
+        .into_iter().map(|mut item| {
+            if channel_key(&item["channelId"]).is_none() { item["channelId"] = json!(id); }
+            if item["channel"].as_str().is_none_or(str::is_empty) { item["channel"] = json!(name); }
+            if item["channelImage"].as_str().is_none_or(str::is_empty) {
+                item["channelImage"] = json!(photo);
+            }
+            item
+        }).collect())
 }
 
 #[tauri::command]
@@ -901,6 +984,16 @@ pub(crate) async fn read_page(request: reqwest::RequestBuilder) -> Result<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn escaped_page_lists_a_scheduled_broadcast() {
+        let html = r#"<script>var ytInitialData = '\x7b\x22videoRenderer\x22:\x7b\x22videoId\x22:\x22fTDvp9CBXoQ\x22,\x22title\x22:\x7b\x22simpleText\x22:\x22NASA\u0027s broadcast\x22\x7d,\x22upcomingEventData\x22:\x7b\x22startTime\x22:\x221795193100\x22\x7d\x7d\x7d';</script>"#;
+        let rows = [initial_data(html).unwrap()];
+        let cards = search_items(&rows, "scheduled");
+        assert_eq!(cards[0]["title"], "NASA's broadcast");
+        assert_eq!(cards[0]["scheduledAt"], 1_795_193_100_000_u64);
+        assert!(search_items(&rows, "live").is_empty());
+    }
 
     #[test]
     fn modern_search_cards_keep_creator_links_photos_duration_and_dates() {

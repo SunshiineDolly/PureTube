@@ -26,9 +26,9 @@ export function Watch({onOpenRoom,roomPlayback,inRoom,onRoomController,playlist,
  useEffect(()=>{if(!message)return;const timer=setTimeout(()=>setMessage(''),2600);return()=>clearTimeout(timer)},[message])
  const playerPosition=useRef<()=>number>(()=>0)
  const scheduledAt=data.liveReminders[v.id]?.at??v.scheduledAt
- const status=useScheduledStatus(v.id,scheduledAt),checked=useWatchCreator(v.id,true),uploader=checked.creator
+ const status=useScheduledStatus(v.id,scheduledAt,v.upcoming),checked=useWatchCreator(v.id,true),uploader=checked.creator
  const video=uploader?{...v,channelId:uploader.id,channel:uploader.name,date:v.date||uploader.date,title:v.title==='YouTube video'?uploader.title||v.title:v.title,description:v.description||uploader.description||'',views:v.views||uploader.views,duration:v.duration||uploader.duration||0}:v
- const live=status==='live'||(uploader?uploader.live:!!v.live),waiting=!!scheduledAt&&status==='waiting'&&!live
+ const live=status==='live'||(uploader?uploader.live:!!v.live),waiting=!!(scheduledAt||v.upcoming)&&status==='waiting'&&!live
  const allowed=!restricted&&(uploader?.embeddable??v.embeddable)
  const next=useUpNext(video,data,Object.values(shared.feeds.states).flatMap(s=>s.feed?.videos??[]).filter(v=>!Object.values(shared.live.states).some(s=>!s.error&&s.video?.id===v.id)))
  useEffect(()=>{if(uploader&&data.settings.history)change(d=>rememberVideo(d,video))},[uploader?.id,uploader?.title,uploader?.date])

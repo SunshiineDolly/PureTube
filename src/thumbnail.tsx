@@ -47,7 +47,7 @@ export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatc
    setPreviewId(undefined)
  }
  function start(){
-   if(v.live||v.scheduledAt||v.paid||!v.embeddable)return
+   if(v.live||v.upcoming||v.scheduledAt||v.paid||!v.embeddable)return
    if(!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return
    clearTimeout(timer.current)
    timer.current=setTimeout(()=>setPreviewId(v.id),450)
@@ -66,7 +66,7 @@ export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatc
    {previewId===v.id&&<YouTubePreview key={v.id} id={v.id}/>}
    {v.duration>0&&<span className="duration">{clock(v.duration)}</span>}
    {v.live&&<span className="live-badge">Live</span>}
-   {!!v.scheduledAt&&!v.live&&<span className="live-badge scheduled-badge">Scheduled</span>}
+   {!!(v.scheduledAt||v.upcoming)&&!v.live&&<span className="live-badge scheduled-badge">Scheduled</span>}
    {checked&&v.date>checked&&<span className="new-badge">New</span>}
    {!!progress?.at&&<span className="progress" style={{width:Math.min(100,100*progress.at/progress.duration)+'%'}}/>}
  </button>
