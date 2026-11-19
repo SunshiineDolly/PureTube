@@ -11,9 +11,11 @@ import net from 'node:net'
 const installer=resolve(process.argv[2])
 const expected=process.argv[3]
 assert.ok(existsSync(installer)&&/^\d+\.\d+\.\d+$/.test(expected))
-const installed=spawnSync(installer,['/S'],{stdio:'ignore',timeout:90000})
+const installDirectory=join(process.env.LOCALAPPDATA,'Programs','PureTube')
+const installed=spawnSync(installer,['/S','/D='+installDirectory],{stdio:'ignore',timeout:90000})
 assert.equal(installed.status,0,'bootstrap installation must succeed')
-const location=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PureTube').InstallLocation"],{encoding:'utf8',windowsHide:true}).trim()
+const location=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PureTube').InstallLocation"],{encoding:'utf8',windowsHide:true}).trim().replace(/^"|"$/g,'')
+assert.equal(location.toLowerCase(),installDirectory.toLowerCase(),'the permanent installation must use the requested directory')
 assert.ok(location&&existsSync(join(location,'puretube.exe')),'installed executable must exist')
 const exe=join(location,'puretube.exe')
 const server=net.createServer().listen(0,'127.0.0.1')
