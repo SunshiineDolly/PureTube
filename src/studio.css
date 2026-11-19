@@ -286,3 +286,4 @@
 .app.collapsed{grid-template-columns:66px minmax(0,1fr)}
 .sidebar-footer .sidebar-flourish{display:none}
 @media(prefers-reduced-motion:reduce){.thumbnail img{transition:none}}
+.update-progress{display:block;width:min(100%,400px);height:7px;accent-color:var(--a);margin:14px 0;border:0;border-radius:99px;overflow:hidden}

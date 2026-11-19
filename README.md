@@ -2,9 +2,11 @@
 
 PureTube is a Windows desktop app for watching recent uploads from the YouTube channels you follow. Public feeds and the official embedded player work without a Google sign-in or API key.
 
+[Download the latest Windows version](https://github.com/SunshiineDolly/PureTube/releases/latest) · [All releases](https://github.com/SunshiineDolly/PureTube/releases)
+
 ## Install and start
 
-1. Run **PureTube_0.9.0_x64-setup.exe**. It installs for the current Windows user. Select the desktop shortcut on the finish page if you want one. Start Menu integration is automatic, and you can pin the running app to the taskbar.
+1. Download the latest **PureTube_*_x64-setup.exe** from GitHub Releases and run it. It installs for the current Windows user. Start Menu integration is automatic, and you can pin the running app to the taskbar.
 2. Open **Your profile** to set an optional display name. No account, API key, or cloud setup is needed.
 3. Switch to **Quiet**. PureTube checks followed channels on launch, every five minutes while open, and when it regains focus after a missed check. **Refresh** checks immediately. You can also paste a YouTube video link into the top bar and press Enter.
 4. In **Manage follows**, paste a `UC...` channel ID, an ID-based `youtube.com/channel/...` URL, or a public feed URL. If the address bar shows an @handle, use the creator's **About → Share channel → Copy channel ID**.
@@ -47,21 +49,27 @@ Stop the dev app before making the installer:
 npm.cmd run tauri build -- --ci
 ```
 
-The executable is in `src-tauri/target/release/puretube.exe`. The installer is in `src-tauri/target/release/bundle/nsis/PureTube_0.9.0_x64-setup.exe`. Tauri downloads its packaging tools when needed. The regular build installs normally and uses manual upgrades until a signed update feed is configured. See below for signed release builds.
+The executable is in `src-tauri/target/release/puretube.exe`. Versioned installers are in `src-tauri/target/release/bundle/nsis/`. Tauri downloads its packaging tools when needed. Builds trust the checked-in public update key. Publishing a new update requires its matching private key; ordinary builds do not produce signed update artifacts.
 
 ## Signed app updates
 
-A signed build checks on launch and every six hours while it is open. **Settings → App updates** can check immediately, show release notes, and install the selected version after confirmation. PureTube requires HTTPS and verifies the installer signature with the public key embedded at build time. The ordinary unsigned build shows that updates are unconfigured.
+A signed build checks on launch and every six hours while it is open. **Settings → App updates** shows the installed version, last successful check, release notes, and download progress. **Update and restart** verifies the installer signature before installation and reopens PureTube afterward. It preserves the local library and preferences. Isolated smoke-test profiles cannot install updates. Older unsigned versions need the first updater-enabled release installed manually once.
 
-1. Generate a Tauri signing key outside the repo using [Tauri's signing instructions](https://v2.tauri.app/plugin/updater/#signing-updates). Choose a strong passphrase and keep the private key and a backup in a secure location. Keep using the same signing key for subsequent releases.
-2. From PowerShell, run:
+The publishing machine keeps its encrypted signing key under `%LOCALAPPDATA%\PureTube\signing`, outside this repository. The password is protected with Windows DPAPI for the current account, and the directory is restricted to that account and SYSTEM. Preserve the key and its password in a secure independent backup; DPAPI files alone are not portable to another Windows account. The repository contains only the public verification key. The setup script refuses to replace an existing or mismatched key.
+
+To build another signed release on the configured machine:
 
 ```powershell
-.\scripts\Build-SignedRelease.ps1 -PublicKeyPath 'C:\path\PureTube.key.pub' -PrivateKeyPath 'C:\path\PureTube.key'
+.\scripts\Build-SignedRelease.ps1
 ```
 
-3. Publish the installer, its `.sig`, and `latest.json` together. By default the manifest uses the latest public GitHub release of `SunshiineDolly/PureTube`. A private repo's release downloads are not accessible to the updater. Keep the source private by passing `-FeedUrl` and `-AssetBaseUrl` for a separate public HTTPS download location. No GitHub token is embedded in the application.
-4. Install the first signed build manually to establish trust. For an update test, publish a signed newer version with the same key and verify it from the earlier signed build. If you use GitHub Releases, keep both the version tag and all three assets aligned with the source commit.
+Commit the matching source, version catalog, and release notes, then publish:
+
+```powershell
+.\scripts\Publish-Release.ps1 -NotesPath '.\releases\vVERSION.md'
+```
+
+The publisher requires SunshiineDolly, uploads a draft with the installer, `.sig`, `latest.json`, and checksums, verifies all uploaded hashes, and then marks it Latest. It refuses conflicting source tags and does not overwrite release assets. The public feed works without GitHub sign-in inside the app. `Publish-GitHub.ps1` is the initial historical-archive import tool, not the regular release workflow.
 
 ## Platform limits and data handling
 

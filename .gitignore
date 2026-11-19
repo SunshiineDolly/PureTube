@@ -4,3 +4,9 @@ target/
 *.log
 src-tauri/gen/
 client_secret*.json
+.env
+.env.*
+*.key
+*.pem
+*.dpapi
+*.sqlite3

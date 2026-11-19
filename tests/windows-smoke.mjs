@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import {spawn,execFileSync,spawnSync} from 'node:child_process'
-import {existsSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs'
+import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs'
 import {resolve,join} from 'node:path'
 import {setTimeout as wait} from 'node:timers/promises'
 import net from 'node:net'
 
 // Run on a Windows test account with no existing PureTube installation or app data.
-const installer=resolve(process.argv[2]??'src-tauri/target/release/bundle/nsis/PureTube_0.9.0_x64-setup.exe')
+const appVersion=JSON.parse(readFileSync(resolve('package.json'),'utf8')).version
+const installer=resolve(process.argv[2]??`src-tauri/target/release/bundle/nsis/PureTube_${appVersion}_x64-setup.exe`)
 const live=process.env.PURETUBE_LIVE_SMOKE==='1'
 const youtubeOnly=process.env.PURETUBE_YOUTUBE_SMOKE==='1'
 assert.ok(existsSync(installer),'build the NSIS installer first')
@@ -469,7 +470,7 @@ try {
  await value(`[...document.querySelectorAll('.palette-option')].find(b=>b.textContent==='Jade Porcelain').click()`)
  await eventually(()=>value('document.documentElement.dataset.accent==="jade" && window.__TAURI_INTERNALS__.invoke("load").then(d=>d.settings.accent==="jade")'))
  assert.equal(await value('getComputedStyle(document.documentElement).colorScheme'),'light')
- await eventually(()=>value('Array.from(document.querySelectorAll("section")).some(section=>section.textContent.includes("Signed updates are not configured for this build"))'))
+ await eventually(()=>value('Array.from(document.querySelectorAll("section")).some(section=>section.textContent.includes("Updates are unavailable in this test build"))'))
  await close()
  await launch()
  await eventually(()=>value('document.querySelector("h1")?.textContent === "Home" && document.documentElement.dataset.theme === "light" && document.documentElement.dataset.accent === "jade" && document.querySelector(".profile-chip")?.textContent==="N"'))

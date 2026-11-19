@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
- [Parameter(Mandatory)][string]$PublicKeyPath,
- [Parameter(Mandatory)][string]$PrivateKeyPath,
+ [string]$PublicKeyPath=(Join-Path $PSScriptRoot '..\src-tauri\updater-public-key.pub'),
+ [string]$PrivateKeyPath=(Join-Path $env:LOCALAPPDATA 'PureTube\signing\updater.key'),
+ [string]$PasswordFile=(Join-Path $env:LOCALAPPDATA 'PureTube\signing\password.dpapi'),
  [uri]$FeedUrl='https://github.com/SunshiineDolly/PureTube/releases/latest/download/latest.json',
  [uri]$AssetBaseUrl
 )
@@ -22,7 +23,7 @@ if(!$AssetBaseUrl.AbsoluteUri.EndsWith('/')){throw 'AssetBaseUrl must end in a s
 $pub=(Get-Content -LiteralPath $pubFile -Raw).Trim()
 if(!$pub){throw 'The public key file is empty.'}
 $override=Join-Path ([IO.Path]::GetTempPath()) ('puretube-updater-'+[Guid]::NewGuid().ToString('N')+'.json')
-$pass=Read-Host 'Tauri signing key password (input stays hidden)' -AsSecureString
+$pass=if(Test-Path -LiteralPath $PasswordFile){Get-Content -LiteralPath $PasswordFile -Raw | ConvertTo-SecureString}else{Read-Host 'Tauri signing key password (input stays hidden)' -AsSecureString}
 $names=@('PURETUBE_UPDATER_PUBLIC_KEY','PURETUBE_UPDATER_ENDPOINT','TAURI_SIGNING_PRIVATE_KEY','TAURI_SIGNING_PRIVATE_KEY_PASSWORD')
 $previous=@{}
 foreach($name in $names){$previous[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
@@ -42,7 +43,7 @@ try {
  if($installer.VersionInfo.ProductVersion -ne $version){throw 'Installer version does not match the source version.'}
  $signature=(Get-Content -LiteralPath ($installer.FullName+'.sig') -Raw).Trim()
  if(!$signature){throw 'Tauri did not generate an installer signature.'}
- $manifest=@{version=$version;pub_date=[DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ');platforms=@{'windows-x86_64'=@{url=[uri]::new($AssetBaseUrl,$name).AbsoluteUri;signature=$signature}}}
+ $manifest=@{version=$version;notes='Signed app updates with download progress and automatic restart. Your local follows, library, and preferences are preserved.';pub_date=[DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ');platforms=@{'windows-x86_64'=@{url=[uri]::new($AssetBaseUrl,$name).AbsoluteUri;signature=$signature}}}
  $destination=Join-Path $output 'latest.json'
  [IO.File]::WriteAllText($destination,($manifest | ConvertTo-Json -Depth 6)+[Environment]::NewLine)
  Get-Item -LiteralPath $installer.FullName,($installer.FullName+'.sig'),$destination | Select-Object Name,Length,FullName

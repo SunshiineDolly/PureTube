@@ -2,7 +2,7 @@ use crate::{AppData, Result};
 use reqwest::Url;
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, State};
+use tauri::{ipc::Channel, AppHandle, State};
 use tauri_plugin_updater::UpdaterExt;
 
 const PUBLIC_KEY: Option<&str> = option_env!("PURETUBE_UPDATER_PUBLIC_KEY");
@@ -27,11 +27,18 @@ fn safe_endpoint(endpoint: &str) -> Option<Url> {
     Some(url)
 }
 pub fn config() -> Option<(&'static str, Url)> {
-    let key = PUBLIC_KEY?.trim();
+    let key = PUBLIC_KEY
+        .unwrap_or(include_str!("../updater-public-key.pub"))
+        .trim();
     if key.is_empty() {
         return None;
     }
-    Some((key, safe_endpoint(ENDPOINT?)?))
+    Some((
+        key,
+        safe_endpoint(ENDPOINT.unwrap_or(
+            "https://github.com/SunshiineDolly/PureTube/releases/latest/download/latest.json",
+        ))?,
+    ))
 }
 fn client(app: &AppHandle, state: &AppData) -> Result<tauri_plugin_updater::Updater> {
     let (key, url) = config()
@@ -42,6 +49,7 @@ fn client(app: &AppHandle, state: &AppData) -> Result<tauri_plugin_updater::Upda
         .endpoints(vec![url])
         .map_err(|_| "The updater endpoint is invalid.")?
         .timeout(std::time::Duration::from_secs(20))
+        .restart_after_install(true)
         .build()
         .map_err(|_| "The updater could not be initialized.".into())
 }
@@ -65,12 +73,13 @@ pub async fn update_install(
     app: AppHandle,
     state: State<'_, AppData>,
     version: String,
+    progress: Channel<Value>,
 ) -> Result<()> {
     if INSTALLING.swap(true, Ordering::AcqRel) {
         return Err("An update installation is already in progress.".into());
     }
     let _guard = InstallGuard;
-    let update = client(&app, &state)?
+    let mut update = client(&app, &state)?
         .check()
         .await
         .map_err(|_| "Could not verify the selected update.")?
@@ -81,8 +90,16 @@ pub async fn update_install(
     if safe_endpoint(update.download_url.as_str()).is_none() {
         return Err("The signed update download must use HTTPS.".into());
     }
-    update.download_and_install(|_, _| {}, || {}).await
-        .map_err(|_| "The update download failed, its signature did not match, or Windows could not start the installer.".into())
+    update.timeout = Some(std::time::Duration::from_secs(120));
+    let mut downloaded = 0u64;
+    let bytes = update.download(|chunk, total| {
+        downloaded += chunk as u64;
+        let _ = progress.send(json!({"event":"downloading","downloaded":downloaded,"total":total}));
+    }, || {
+        let _ = progress.send(json!({"event":"verifying"}));
+    }).await.map_err(|_| "The update could not be downloaded and verified. Nothing was installed. Try again later.")?;
+    let _ = progress.send(json!({"event":"installing"}));
+    update.install(bytes).map_err(|_| "Windows could not start the update installer. Try again or download the release from GitHub.".into())
 }
 
 #[cfg(test)]
