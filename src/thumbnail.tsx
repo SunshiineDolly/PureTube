@@ -3,40 +3,63 @@ import {Play} from 'lucide-react'
 import type {Video} from './domain'
 import {invoke} from '@tauri-apps/api/core'
 const previewCache=new Map<string,{url:string;at:number}>()
-let preparing=0
-async function smoothPreview(id:string){const cached=previewCache.get(id);if(cached&&Date.now()-cached.at<15*60_000)return cached.url;if(preparing>=2)throw Error('Preview busy');preparing++;try{const url=await invoke<string>('preview_stream',{id});previewCache.set(id,{url,at:Date.now()});if(previewCache.size>60)previewCache.delete(previewCache.keys().next().value!);return url}finally{preparing--}}
+const pendingPreviews=new Map<string,Promise<string>>()
 
+function smoothPreview(id:string){
+ const cached=previewCache.get(id)
+ if(cached&&Date.now()-cached.at<15*60_000)return Promise.resolve(cached.url)
+ const pending=pendingPreviews.get(id)
+ if(pending)return pending
+ if(pendingPreviews.size>=2)return
+ const request=invoke<string>('preview_stream',{id}).then(url=>{
+   previewCache.delete(id)
+   previewCache.set(id,{url,at:Date.now()})
+   if(previewCache.size>60)previewCache.delete(previewCache.keys().next().value!)
+   return url
+ }).finally(()=>pendingPreviews.delete(id))
+ pendingPreviews.set(id,request)
+ return request
+}
 
-let stopCurrent:(()=>void)|undefined
 export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatch:(v:Video)=>void;progress?:{at:number;duration:number};checked?:string}){
- const [preview,setPreview]=useState(false)
- const [previewUrl,setPreviewUrl]=useState(''),[fallback,setFallback]=useState(false)
- const hovered=useRef(false)
+ const [preview,setPreview]=useState<{id:string;url:string;playing:boolean}>()
  const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined)
- const stop=useRef(()=>{})
- stop.current=()=>{hovered.current=false;clearTimeout(timer.current);setPreview(false);setFallback(false)}
+ const run=useRef(0)
+ const stop=()=>{
+   run.current++
+   clearTimeout(timer.current)
+   setPreview(undefined)
+ }
  function start(){
-   if(v.scheduledAt||!v.embeddable||!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return
-   hovered.current=true
+   if(v.live||v.scheduledAt||v.paid||!v.embeddable||!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return
+   const current=++run.current
    timer.current=setTimeout(()=>{
-     if(!hovered.current)return
-     stopCurrent?.()
-     const close=()=>stop.current()
-     stopCurrent=close
-     void smoothPreview(v.id).then(url=>{if(hovered.current){setPreviewUrl(url);setPreview(true)}},()=>{if(hovered.current){setFallback(true);setPreview(true)}})
-
-   },750)
+     void smoothPreview(v.id)?.then(url=>{
+       if(run.current===current)setPreview({id:v.id,url,playing:false})
+     },()=>{/* Keep the thumbnail when YouTube does not supply a playable stream. */})
+   },250)
  }
  useEffect(()=>{
-   const hidden=()=>{if(document.hidden)stop.current()}
+   const hidden=()=>{if(document.hidden)stop()}
    document.addEventListener('visibilitychange',hidden)
-   return ()=>{document.removeEventListener('visibilitychange',hidden);clearTimeout(timer.current);stop.current=()=>{}}
- },[])
+   return ()=>{
+     document.removeEventListener('visibilitychange',hidden)
+     run.current++
+     clearTimeout(timer.current)
+   }
+ },[v.id])
+ const currentPreview=preview?.id===v.id?preview:undefined
  const duration=v.duration>=3600?Math.floor(v.duration/3600)+':'+String(Math.floor(v.duration/60)%60).padStart(2,'0')+':'+String(v.duration%60).padStart(2,'0'):Math.floor(v.duration/60)+':'+String(v.duration%60).padStart(2,'0')
- return <button className="thumbnail" aria-label={'Watch '+v.title} onClick={()=>{stop.current();onWatch(v)}} onMouseEnter={start} onMouseLeave={()=>stop.current()} onBlur={()=>stop.current()}>
+ return <button className="thumbnail video-thumbnail" aria-label={'Watch '+v.title} onClick={()=>{stop();onWatch(v)}} onMouseEnter={start} onMouseLeave={stop} onBlur={stop}>
    <span className="thumb-placeholder" aria-hidden="true"><Play size={21}/></span>
    {v.image&&<img src={v.image} loading="lazy" alt=""/>}
-   {preview&&(fallback?<iframe className="thumbnail-preview" src={'https://www.youtube.com/embed/'+v.id+'?autoplay=1&mute=1&controls=0&playsinline=1&rel=0'} title="Muted preview" tabIndex={-1} aria-hidden="true" allow="autoplay; encrypted-media" referrerPolicy="strict-origin-when-cross-origin"/>:<video className="thumbnail-preview" src={previewUrl} muted autoPlay loop playsInline onError={()=>setFallback(true)} aria-hidden="true"/>)}
+   {currentPreview&&<video className="thumbnail-preview" data-playing={currentPreview.playing}
+     src={currentPreview.url} muted autoPlay loop playsInline disablePictureInPicture aria-hidden="true"
+     onPlaying={()=>setPreview(active=>active?.url===currentPreview.url?{...active,playing:true}:active)}
+     onError={()=>{
+       if(previewCache.get(v.id)?.url===currentPreview.url)previewCache.delete(v.id)
+       stop()
+     }}/>}
    {v.duration>0&&<span className="duration">{duration}</span>}
    {v.live&&<span className="live-badge">Live</span>}
    {!!v.scheduledAt&&!v.live&&<span className="live-badge scheduled-badge">Scheduled</span>}

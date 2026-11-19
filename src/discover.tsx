@@ -12,6 +12,7 @@ import {recommendationIds,useRecommendations} from './use-recommendations'
 import type {Surface} from './recommendations'
 import {CategoryRail} from './category-rail'
 import {RandomWatch} from './random-watch-button'
+import {Thumbnail} from './thumbnail'
 
 export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surface}){
  const {feed,target,refresh,more,hasMore}=useRecommendations(surface,shared.data)
@@ -71,7 +72,7 @@ function TopicCatalog({topic,shared,exclude,surface="discover"}:{topic:string;sh
    <div className="row recommendation-toolbar"><RandomWatch items={videos??[]} shared={shared} surface={surface}/></div>
    {catalog.error?<><Notice text={catalog.error}/><button className="button" onClick={catalog.reload}>Try again</button></>:
     !videos?<Loading/>:lead?<><article className="topic-feature">
-       <button className="thumbnail" aria-label={'Watch '+lead.title} onClick={()=>shared.watch(lead)}><img src={lead.image} alt=""/></button>
+       <Thumbnail key={lead.id} video={lead} onWatch={shared.watch}/>
        <div className="topic-feature-copy">
          <p className="eyebrow">{topic}</p><h2>{lead.title}</h2>
          <div className="row"><CreatorAvatar id={lead.channelId} name={lead.channel} src={lead.channelImage}/><span>{lead.channel}{lead.publishedLabel?' · '+lead.publishedLabel:''}</span></div>

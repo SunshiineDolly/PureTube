@@ -163,14 +163,18 @@ fn prepare(
     app: &tauri::AppHandle,
     state: &Downloads,
     id: &str,
+    include_ffmpeg: bool,
 ) -> Result<HashMap<String, PathBuf>> {
     let _guard = state.tools.lock().map_err(|_| "Download setup is busy.")?;
     let root = PathBuf::from(
         std::env::var_os("LOCALAPPDATA").ok_or("Windows app-data folder is unavailable.")?,
     )
     .join("PureTube/download-tools");
-    let tools: Vec<Tool> = serde_json::from_str(include_str!("../download-tools.json"))
+    let mut tools: Vec<Tool> = serde_json::from_str(include_str!("../download-tools.json"))
         .map_err(|_| "Invalid download tool manifest.")?;
+    if !include_ffmpeg {
+        tools.retain(|tool| tool.name != "ffmpeg");
+    }
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(300))
         .user_agent("Viddy-downloads")
@@ -289,9 +293,16 @@ pub async fn preview_stream(app: tauri::AppHandle, id: String) -> Result<String>
     if id.len()!=11 || !id.bytes().all(|b|b.is_ascii_alphanumeric()||b==b'_'||b==b'-') { return Err("Invalid video.".into()); }
     tauri::async_runtime::spawn_blocking(move || {
         let state=app.state::<Downloads>();
-        let tools=prepare(&app,&state,"preview")?;
+        let tools=prepare(&app,&state,"preview",false)?;
         let mut command=Command::new(&tools["yt-dlp.exe"]);
-        command.args(["--ignore-config","--no-playlist","--no-warnings","--no-cache-dir","--check-formats","--socket-timeout","8","--retries","0","--extractor-retries","0","--match-filter","!is_live & !is_upcoming","--get-url","--js-runtimes",&format!("deno:{}",tools["deno.exe"].display()),"-f","bv[height<=720][ext=mp4]/b[height<=720][ext=mp4]","--",&format!("https://www.youtube.com/watch?v={id}")]);
+        command.args([
+            "--ignore-config", "--no-playlist", "--no-warnings", "--no-cache-dir",
+            "--check-formats", "--socket-timeout", "5", "--retries", "0",
+            "--extractor-retries", "0", "--match-filter", "!is_live & !is_upcoming",
+            "--get-url", "--js-runtimes", &format!("deno:{}", tools["deno.exe"].display()),
+            "-f", "bv[height>=360][height<=720][ext=mp4]/b[height>=360][height<=720][ext=mp4]",
+            "--", &format!("https://www.youtube.com/watch?v={id}"),
+        ]);
         #[cfg(windows)]
         command.creation_flags(0x08000000);
         let output=command.output().map_err(|_|"Preview could not start.")?;
@@ -313,7 +324,7 @@ fn worker(app: tauri::AppHandle, id: String) -> Result<()> {
         .find(|j| j.id == id)
         .cloned()
         .ok_or("Download not found.")?;
-    let tools = prepare(&app, &state, &id)?;
+    let tools = prepare(&app, &state, &id, true)?;
     if state.stopped(&id) {
         return Err("Cancelled".into());
     }
