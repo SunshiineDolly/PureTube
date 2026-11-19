@@ -64,8 +64,8 @@ pub fn configure_tray(app: &tauri::App) -> tauri::Result<()> {
         menu::{Menu, MenuItem},
         tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     };
-    let open = MenuItem::with_id(app, "open", "Open PureTube", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit PureTube", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open Viddy", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Viddy", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
     fn restore(app: &tauri::AppHandle) {
         if let Some(w) = app.get_webview_window("main") {
@@ -77,7 +77,7 @@ pub fn configure_tray(app: &tauri::App) -> tauri::Result<()> {
     let mut tray = TrayIconBuilder::with_id("puretube")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip("PureTube")
+        .tooltip("Viddy")
         .on_menu_event(|app, e| match e.id.as_ref() {
             "open" => restore(app),
             "quit" => app.exit(0),

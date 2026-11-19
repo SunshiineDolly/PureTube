@@ -130,7 +130,7 @@ async fn export_library(app: tauri::AppHandle, data: Value) -> Result<bool> {
     if let Some(FilePath::Path(path)) = app
         .dialog()
         .file()
-        .set_file_name("PureTube-library.json")
+        .set_file_name("Viddy-library.json")
         .add_filter("JSON", &["json"])
         .blocking_save_file()
     {
@@ -195,6 +195,7 @@ fn main() {
         youtube_search::channel_profile,
         youtube_search::live_status,
         youtube_search::watch_creator,
+        youtube_search::related_videos,
         youtube_search::channel_live,
         youtube_search::creator_photo,
         youtube_search::youtube_suggestions,
@@ -211,6 +212,7 @@ fn main() {
         popout::player_video,
         popout::player_sample,
         popout::player_autoplay,
+        popout::player_queue,
         downloads::download_list,
         downloads::download_video,
         downloads::download_cancel,
@@ -302,7 +304,15 @@ fn main() {
             let download_root = if isolated {
                 dir.join("downloads")
             } else {
-                app.path().download_dir()?.join("PureTube")
+                {
+                    let folder = app.path().download_dir()?;
+                    let legacy = folder.join("PureTube");
+                    if dir.join("downloads.json").exists() && legacy.exists() {
+                        legacy
+                    } else {
+                        folder.join("Viddy")
+                    }
+                }
             };
             app.manage(downloads::Downloads::new(
                 download_root,
@@ -337,6 +347,8 @@ fn main() {
                         | "player_pin"
                         | "player_video"
                         | "player_autoplay"
+                        | "player_queue"
+                        | "related_videos"
                         | "player_sample"
                         | "load"
                         | "search_youtube"
@@ -346,13 +358,13 @@ fn main() {
             if invoke.message.webview_ref().label() != "main" && !mini {
                 invoke
                     .resolver
-                    .reject("Native PureTube commands are only available in the local app window.");
+                    .reject("Native Viddy commands are only available in the local app window.");
                 return true;
             }
             commands(invoke)
         })
         .run(context)
-        .expect("Could not launch PureTube");
+        .expect("Could not launch Viddy");
 }
 
 #[cfg(test)]

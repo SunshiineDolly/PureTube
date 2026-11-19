@@ -36,7 +36,7 @@ pub fn config() -> Option<(&'static str, Url)> {
     Some((
         key,
         safe_endpoint(ENDPOINT.unwrap_or(
-            "https://github.com/SunshiineDolly/PureTube/releases/latest/download/latest.json",
+            "https://github.com/SunshiineDolly/Viddy/releases/latest/download/latest.json",
         ))?,
     ))
 }
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn accepts_https_update_manifest_without_credentials_or_fragment() {
         assert!(safe_endpoint(
-            "https://github.com/SunshiineDolly/PureTube/releases/latest/download/latest.json"
+            "https://github.com/SunshiineDolly/Viddy/releases/latest/download/latest.json"
         )
         .is_some());
         assert!(safe_endpoint("http://example.com/latest.json").is_none());

@@ -326,6 +326,57 @@ fn video(renderer: &Value) -> Option<Value> {
 }
 
 #[tauri::command]
+pub async fn related_videos(state: State<'_, AppData>, id: String) -> Result<Vec<Value>> {
+    if !valid_id(&id, 11) {
+        return Err("Invalid video ID.".into());
+    }
+    let url = Url::parse_with_params(
+        "https://www.youtube.com/watch",
+        &[("v", id.as_str()), ("hl", "en")],
+    )
+    .map_err(|_| "Invalid video.")?;
+    let html = public_page(&state.client, url).await?;
+    let data = initial_data(&html)?;
+    fn collect(node: &Value, depth: u8, found: &mut Vec<Value>) {
+        if depth == 0 || found.len() >= 100 {
+            return;
+        }
+        if let Some(v) = node
+            .get("compactVideoRenderer")
+            .and_then(video)
+            .or_else(|| node.get("videoRenderer").and_then(video))
+            .or_else(|| node.get("lockupViewModel").and_then(lockup_video))
+        {
+            found.push(v);
+            return;
+        }
+        match node {
+            Value::Object(m) => {
+                for v in m.values() {
+                    collect(v, depth - 1, found)
+                }
+            }
+            Value::Array(a) => {
+                for v in a {
+                    collect(v, depth - 1, found)
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    collect(&data, 32, &mut found);
+    let mut seen = HashSet::new();
+    Ok(found
+        .into_iter()
+        .filter(|v| {
+            v["id"] != id
+                && v["shorts"] != true
+                && seen.insert(v["id"].as_str().unwrap_or_default().to_owned())
+        })
+        .collect())
+}
+#[tauri::command]
 pub async fn watch_creator(state: State<'_, AppData>, id: String) -> Result<Value> {
     if !valid_id(&id, 11) {
         return Err("Invalid video ID.".into());

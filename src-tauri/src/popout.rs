@@ -35,7 +35,7 @@ pub async fn open_player(
         "player",
         tauri::WebviewUrl::App("index.html?mini=1".into()),
     )
-    .title("PureTube mini player")
+    .title("Viddy mini player")
     .use_https_scheme(true)
     .decorations(false)
     .shadow(false)
@@ -84,6 +84,13 @@ pub fn player_video(app: tauri::AppHandle, state: State<PlayerState>, video: Val
         let mut payload = state.0.lock().map_err(|_| "Player is busy.")?;
         payload["video"] = video.clone();
         payload["start"] = json!(0);
+        if let Some(ids) = payload["playlist"]["ids"].as_array() {
+            if let Some(index) = ids.iter().position(|id| id == &video["id"]) {
+                payload["playlist"]["index"] = json!(index)
+            } else {
+                payload["playlist"] = Value::Null
+            }
+        }
     }
     app.emit_to("main", "player-video", video)
         .map_err(|_| "Could not update the player.".into())
@@ -132,4 +139,29 @@ pub fn player_autoplay(
     state.0.lock().map_err(|_| "Player is busy.")?["autoplay"] = json!(enabled);
     app.emit_to("main", "player-autoplay", enabled)
         .map_err(|_| "Could not change autoplay.".into())
+}
+
+#[tauri::command]
+pub fn player_queue(
+    app: tauri::AppHandle,
+    state: State<PlayerState>,
+    queue: Option<Value>,
+) -> Result<()> {
+    let queue = queue.unwrap_or(Value::Null);
+    if !queue.is_null()
+        && (queue.to_string().len() > 100_000
+            || !queue["ids"].as_array().is_some_and(|ids| {
+                !ids.is_empty()
+                    && ids.len() <= 5000
+                    && ids.iter().all(|id| valid_video(&json!({"id":id})))
+            })
+            || queue["index"]
+                .as_u64()
+                .is_none_or(|i| i as usize >= queue["ids"].as_array().map_or(0, |a| a.len())))
+    {
+        return Err("Invalid queue.".into());
+    }
+    state.0.lock().map_err(|_| "Player is busy.")?["playlist"] = queue.clone();
+    app.emit_to("main", "player-queue", queue)
+        .map_err(|_| "Could not update queue.".into())
 }

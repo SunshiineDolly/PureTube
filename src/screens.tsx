@@ -13,10 +13,10 @@ import {CreatorAvatar} from './creator-avatar'
 import {invoke} from '@tauri-apps/api/core'
 import {FollowedLiveShelf,useFollowedLive,type FollowedLive} from './followed-live'
 
-export type Shared = {data:Library;change:(fn:(d:Library)=>Library)=>void;watch:(v:Video)=>void;channel:(id:string)=>void;follow:(id:string)=>void;subscriptions:()=>void;discover:()=>void;feeds:PublicFeeds;followIds:string[];live:FollowedLive}
+export type Shared = {data:Library;change:(fn:(d:Library)=>Library)=>void;playNext:(v:Video)=>void;enqueue:(v:Video)=>void;playPlaylist:(name:string,ids:string[],index?:number)=>void;watch:(v:Video)=>void;channel:(id:string)=>void;follow:(id:string)=>void;subscriptions:()=>void;discover:()=>void;feeds:PublicFeeds;followIds:string[];live:FollowedLive}
 export function Grid({shared,items,isNew=false,extra}:{shared:Shared;items:Video[];isNew?:boolean;extra?:(v:Video)=>React.ReactNode}) {
  const {data,change,watch,channel}=shared
- return <VideoGrid items={items.filter(v=>visible(v,data.settings))} extra={extra} onWatch={watch} onChannel={channel} progress={data.settings.progress?data.progress:undefined} later={data.later} checked={isNew?data.checked:undefined} onSave={id=>change(d=>{const video=items.find(v=>v.id===id);return {...(video?rememberVideo(d,video):d),later:toggled(d.later,id)}})}/>
+ return <VideoGrid onQueue={shared.enqueue} items={items.filter(v=>visible(v,data.settings))} extra={extra} onWatch={watch} onChannel={channel} progress={data.settings.progress?data.progress:undefined} later={data.later} checked={isNew?data.checked:undefined} onSave={id=>change(d=>{const video=items.find(v=>v.id===id);return {...(video?rememberVideo(d,video):d),later:toggled(d.later,id)}})}/>
 }
 export function Heading({label,title,detail,children}:{label:string;title:string;detail:string;children?:React.ReactNode}) {
  return <div className="heading"><div>{label&&<p className="eyebrow">{label}</p>}<h1>{title}</h1>{detail&&<p>{detail}</p>}</div>{children&&<div className="heading-actions">{children}</div>}</div>
@@ -36,7 +36,7 @@ export function Quiet({shared}:{shared:Shared}) {
  const checks=states.flatMap(s=>s.error||!s.feed?[]:[s.feed.checkedAt])
  const failed=states.filter(s=>s.error)
  const stale=failed.some(s=>s.feed)
- return <><FollowedLiveShelf shared={shared}/><Heading label="" title="Following" detail={'Recent uploads from followed creators. Checks every '+REFRESH_MINUTES+' minutes while PureTube is open.'}>
+ return <><FollowedLiveShelf shared={shared}/><Heading label="" title="Following" detail={'Recent uploads from followed creators. Checks every '+REFRESH_MINUTES+' minutes while Viddy is open.'}>
  <button className="button" onClick={shared.subscriptions}><Plus size={16}/> Follow a channel</button>
  {allowed.length>0&&<button className="button" disabled={feeds.busy} onClick={()=>{
    change(d=>({...d,checked:{...d.checked,...Object.fromEntries(allowed.flatMap(id=>{const at=feeds.states[id]?.feed?.checkedAt;return at?[[id,new Date(at).toISOString()]]:[]}))}}))
@@ -68,7 +68,7 @@ export function Subscriptions({shared}:{shared:Shared}) {
      setLookup('')
    }catch(e){setError(errorText(e))}finally{setBusy(false)}
  }
- return <><Heading label="YOUR CREATORS" title="Manage follows" detail="Add the creators you watch. Following in PureTube stays on this PC."/>
+ return <><Heading label="YOUR CREATORS" title="Manage follows" detail="Add the creators you watch. Following in Viddy stays on this PC."/>
  <form className="filter-row" onSubmit={e=>{e.preventDefault();void add()}}><input aria-label="Channel ID or link" placeholder="Channel ID or link" value={lookup} onChange={e=>setLookup(e.target.value)}/><button className="button" disabled={busy||!lookup.trim()}><Plus size={16}/> {busy?'Checking...':'Follow'}</button></form>
  {error&&<Notice text={error}/>}
  {!ids.length?<Empty title="No visible subscriptions" detail="Paste a YouTube channel ID or channel feed link. On YouTube, open the channel’s About panel, then choose Share channel and Copy channel ID."/>:
@@ -112,7 +112,7 @@ export function ChannelPage({shared,id,tab='home',setTab}:{shared:Shared;id:stri
    <button className="thumbnail" aria-label={'Watch live: '+title} onClick={()=>shared.watch(broadcast)}>
      <img src={broadcast.image} alt=""/><span className="live-badge">LIVE NOW</span>
    </button>
-   <div><p className="on-air"><i/> Streaming now</p><h2>{broadcast.title}</h2><p>Watch the live broadcast with chat in PureTube.</p>
+   <div><p className="on-air"><i/> Streaming now</p><h2>{broadcast.title}</h2><p>Watch the live broadcast with chat in Viddy.</p>
    <button className="button accent" onClick={()=>shared.watch(broadcast)}>Watch live</button></div>
  </section>}
  <div className="creator-tabs" aria-label="Channel tabs">{([['home','Home'],['videos','Videos'],['streams','Past streams'],['about','About']] as const).map(([value,label])=><button aria-pressed={tab===value} key={value} onClick={()=>setTab(value)}>{label}</button>)}</div>
@@ -143,7 +143,7 @@ export function LibraryPage({shared,kind}:{shared:Shared;kind:'library'|'later'|
      return {...d,progress:Object.fromEntries(Object.entries(d.progress).filter(([k])=>k!==id))}
    })
  }
- return <><Heading label="ON THIS DEVICE" title={kind==='library'?'Library':kind==='later'?'Watch Later':'History'} detail={kind==='history'?'Videos you have played in PureTube.':'Make a little room for the videos you want to keep.'}/>
+ return <><Heading label="ON THIS DEVICE" title={kind==='library'?'Library':kind==='later'?'Watch Later':'History'} detail={kind==='history'?'Videos you have played in Viddy.':'Make a little room for the videos you want to keep.'}/>
  {kind==='history'&&<div className="history-tabs" role="group" aria-label="History view"><button aria-pressed={!unfinished} onClick={()=>{setUnfinished(false);setLimit(24)}}>All watched</button><button aria-pressed={unfinished} onClick={()=>{setUnfinished(true);setLimit(24)}}>Unfinished videos</button></div>}
  {kind==='library'&&<div className="filter-row"><label>Shelf <select value={tab} onChange={e=>{setTab(e.target.value);setLimit(24)}}><option value="favorites">Favorites</option>{data.collections.map((c,i)=><option key={i} value={'collection:'+i}>{c.name}</option>)}</select></label>
  <form className="row" onSubmit={e=>{e.preventDefault();const title=name.trim();if(title&&!data.collections.some(c=>c.name===title)){const i=data.collections.length;change(d=>({...d,collections:[...d.collections,{name:title,ids:[]}]}));setName('');setTab('collection:'+i)}}}><input aria-label="New collection name" placeholder="New collection" maxLength={80} value={name} onChange={e=>setName(e.target.value)}/><button className="button" disabled={!name.trim()||data.collections.length>=200}><Plus size={16}/> Create</button></form>

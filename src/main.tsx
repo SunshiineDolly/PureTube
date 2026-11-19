@@ -21,7 +21,8 @@ import {Discover,RecommendationFeed} from './discover'
 import {useUpdates} from './updates'
 import {categoryFor} from './topics'
 import {SearchPage,type SearchSource} from './search'
-import {Profile} from './profile'
+import {LibraryStudio} from './library-studio'
+import type {PlaylistQueue} from './playlist-queue'
 import {BrandMark} from './brand'
 import {CreatorAvatar} from './creator-avatar'
 import {SearchBar} from './search-bar'
@@ -33,9 +34,9 @@ import {LiveChat} from './live-chat'
 import './styles.css'
 import './studio.css'
 
-type Name='home'|'discover'|'following'|'profile'|'subscriptions'|'library'|'later'|'history'|'settings'|'downloads'
+type Name='home'|'discover'|'following'|'subscriptions'|'library'|'later'|'history'|'settings'|'downloads'
 type Route={name:Name}|{name:'search';query:string;source?:SearchSource}|{name:'live';query?:string;mode?:'live'|'scheduled'}|{name:'channel';id:string;tab?:ChannelTab}|{name:'watch';video:Video}
-const nav = [{id:'home',name:'Home',Icon:House},{id:'discover',name:'Discover',Icon:Compass},{id:'following',name:'Following',Icon:Users},{id:'live',name:'Live',Icon:Radio},{id:'profile',name:'Your profile',Icon:UserRound},{id:'subscriptions',name:'Manage follows',Icon:Users},{id:'library',name:'Library',Icon:Bookmark},{id:'later',name:'Watch Later',Icon:Clock3},{id:'history',name:'History',Icon:History},{id:'settings',name:'Settings',Icon:Gear}] as const
+const nav = [{id:'home',name:'Home',Icon:House},{id:'discover',name:'Discover',Icon:Compass},{id:'following',name:'Following',Icon:Users},{id:'live',name:'Live',Icon:Radio},{id:'subscriptions',name:'Manage follows',Icon:Users},{id:'library',name:'Library',Icon:Bookmark},{id:'later',name:'Watch Later',Icon:Clock3},{id:'history',name:'History',Icon:History},{id:'settings',name:'Settings',Icon:Gear}] as const
 const localDate=()=>new Date().toLocaleDateString('en-CA')
 function App() {
  const {data,ready,failed,error,change,setting}=useLibrary(), s=data.settings
@@ -43,6 +44,8 @@ function App() {
  const restoreScroll=useRef(0)
  const [notice,setNotice]=useState(''),[reminder,setReminder]=useState('')
  const [text,setText]=useState('')
+ const [activeVideo,setActiveVideo]=useState<Video>()
+ const [playlist,setPlaylist]=useState<PlaylistQueue>();const playlistRef=useRef(playlist);playlistRef.current=playlist
  const [floating,setFloating]=useState<{video:Video;start:number}|null>(null),[returned,setReturned]=useState<{id:string;start:number}>()
  const [focus,setFocus]=useState(false),[theater,setTheater]=useState(false),[session,setSession]=useState(0)
  const searchRef=useRef<HTMLInputElement>(null),main=useRef<HTMLElement>(null),dataRef=useRef(data)
@@ -67,6 +70,7 @@ function App() {
  },[route])
  function go(next:Route) {
    if(next.name===route.name&&next.name!=='search'&&next.name!=='watch'&&next.name!=='channel')return
+   if(next.name==='watch')setActiveVideo(next.video)
    if(next.name==='watch')void invoke('close_original_player').catch(()=>{})
    setText('')
    routes.current.push({route,text:route.name==='search'?route.query:text,scroll:main.current?.scrollTop??0})
@@ -75,14 +79,21 @@ function App() {
  }
  function back() {
    const entry=routes.current.pop()
+   if(entry?.route.name==='watch'){setActiveVideo(entry.route.video);const id=entry.route.video.id;setPlaylist(q=>q?.ids.includes(id)?{...q,index:q.ids.indexOf(id)}:undefined)}
    restoreScroll.current=entry?.scroll??0
    setRoute(entry?.route??{name:'home'});setText('');setFocus(false);setTheater(false);setNotice('')
  }
+ function playPlaylist(name:string,ids:string[],index=0){
+  if(!ids[index])return
+  if(floating)void invoke('close_player');setPlaylist({name,ids,index,repeat:false});go({name:'watch',video:data.savedVideos[ids[index]]??linkVideo(ids[index])})
+ }
+ function queueWatch(index:number){const q=playlistRef.current;if(!q?.ids[index])return;setPlaylist({...q,index});if(floating)void invoke('close_player');const video=dataRef.current.savedVideos[q.ids[index]]??linkVideo(q.ids[index]);if(route.name==='watch')go({name:'watch',video});else setActiveVideo(video)}
  function submit(value:string) {
+   setPlaylist(undefined)
    const term=value.trim()
    if(!term)return
    const link=parseVideo(term)
-   if(link?.shorts){setNotice('Shorts are not available in PureTube.');return}
+   if(link?.shorts){setNotice('Shorts are not available in Viddy.');return}
    if(!link){
      if(/^https?:\/\//i.test(term)){setNotice('Paste a valid YouTube video link.');return}
      go({name:'search',query:term})
@@ -93,7 +104,7 @@ function App() {
    if(!visible(v,s))setNotice('This video is hidden by your filters.')
    else go({name:'watch',video:v})
  }
- const shared:Shared={data,change,feeds,followIds,live:followedLive,watch:v=>{if(data.settings.history)change(d=>rememberVideo(d,v));if(floating)void invoke('close_player');go({name:'watch',video:v})},channel:id=>go({name:'channel',id}),follow:id=>{if(channelId(id))change(d=>({...d,follows:toggled(d.follows,id)}))},subscriptions:()=>go({name:'subscriptions'}),discover:()=>go({name:'discover'})}
+ const shared:Shared={data,change,playNext:v=>{setPlaylist(undefined);setActiveVideo(v)},playPlaylist,enqueue:v=>{setPlaylist(q=>{const base=q??{name:'Queue',ids:activeVideo?[activeVideo.id]:[],index:0,repeat:false};return {...base,ids:[...new Set([...base.ids,v.id])]}});change(d=>rememberVideo(d,v));setNotice('Added to queue.');if(!activeVideo){setActiveVideo(v);go({name:'watch',video:v})}},feeds,followIds,live:followedLive,watch:v=>{setPlaylist(undefined);if(data.settings.history)change(d=>rememberVideo(d,v));if(floating)void invoke('close_player');go({name:'watch',video:v})},channel:id=>go({name:'channel',id}),follow:id=>{if(channelId(id))change(d=>({...d,follows:toggled(d.follows,id)}))},subscriptions:()=>go({name:'subscriptions'}),discover:()=>go({name:'discover'})}
  const noteSample=(id:string,position:number,duration:number,elapsed:number,live=false)=>{
    if(!Number.isFinite(elapsed)||elapsed<0)return
    const settings=dataRef.current.settings
@@ -113,7 +124,8 @@ function App() {
     if(p.started&&dataRef.current.settings.history)change(d=>{const topic=categoryFor(p.video);return {...d,history:{...d.history,[p.video.id]:Date.now()},interests:topic?{...d.interests,[topic]:(d.interests[topic]??0)+1}:d.interests}})
     if(!p.started){noteSample(p.video.id,p.position,p.duration,p.elapsed,!!p.video.live);setSession(s=>s+p.elapsed);setFloating(old=>old?{...old,start:p.position}:old)}
    }),
-   listen<Video>('player-video',({payload:video})=>{setFloating({video,start:0});setRoute(old=>old.name==='watch'?{name:'watch',video}:old)}),
+   listen<Video>('player-video',({payload:video})=>{setFloating({video,start:0});setActiveVideo(video);setPlaylist(q=>q&&q.ids.includes(video.id)?{...q,index:q.ids.indexOf(video.id)}:undefined);setRoute(old=>old.name==='watch'?{name:'watch',video}:old)}),
+   listen<PlaylistQueue|undefined>('player-queue',({payload:q})=>setPlaylist(q??undefined)),
    listen<boolean>('player-autoplay',({payload:enabled})=>change(d=>({...d,settings:{...d.settings,autoplay:enabled}}))),
    listen<{video:Video;start:number}>('player-closed',({payload:p})=>{setReturned({id:p.video.id,start:p.start??0});setFloating(null)})
   ];return()=>{subscriptions.forEach(off=>void off.then(f=>f()))}
@@ -122,38 +134,39 @@ function App() {
  const liveChannels=followIds.filter(id=>!!followedLive.states[id]?.video&&!followedLive.states[id]?.error)
  const sidebarFollows=[...liveChannels,...followIds.filter(id=>!liveChannels.includes(id))]
  return <div className={'app '+(s.collapsed?'collapsed ':'')+(focus?'focus ':'')+(s.density==='compact'?'compact':'')}>
- <header className="top" data-tauri-drag-region><div className="header-brand" data-tauri-drag-region>{!focus&&<button className="icon top-menu" aria-label={s.collapsed?'Expand sidebar':'Collapse sidebar'} aria-expanded={!s.collapsed} disabled={!ready} onClick={()=>setting('collapsed',!s.collapsed)}><Menu size={23}/></button>}<button className="brand" aria-label="PureTube Home" onClick={()=>go({name:'home'})}><BrandMark/><span>PureTube<sup aria-hidden="true">✦</sup></span></button></div>
+ <header className="top" data-tauri-drag-region><div className="header-brand" data-tauri-drag-region>{!focus&&<button className="icon top-menu" aria-label={s.collapsed?'Expand sidebar':'Collapse sidebar'} aria-expanded={!s.collapsed} disabled={!ready} onClick={()=>setting('collapsed',!s.collapsed)}><Menu size={23}/></button>}<button className="brand" aria-label="Viddy Home" onClick={()=>go({name:'home'})}><BrandMark/><span>Viddy<sup aria-hidden="true">✦</sup></span></button></div>
  <div className="header-center" data-tauri-drag-region>{focus?<div className="focus-bar"><span>Focus Player</span><button className="button" onClick={()=>setFocus(false)}><Minimize size={16}/> Exit focus</button></div>:
  <SearchBar inputRef={searchRef} ready={ready} text={text} setText={setText} submit={submit}/>}</div>
  <div className="header-actions">{!focus&&<>
  <button className="icon theme" aria-label={'Switch to '+(s.theme==='dark'?'light':'dark')+' theme'} disabled={!ready} onClick={()=>setting('theme',s.theme==='dark'?'light':'dark')}>{s.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button>
  {updates.release&&<button className="button accent" onClick={()=>go({name:'settings'})}>Update available</button>}
- <button className="profile-chip" aria-label="Open local profile" onClick={()=>go({name:'profile'})}>{data.profileEmoji||(data.profileName?Array.from(data.profileName)[0].toUpperCase():<UserRound size={19}/>)}</button></>}
+</>}
  <WindowControls/></div>
  </header>
  {!focus&&<aside className="sidebar"><nav aria-label="Main navigation">{nav.filter(item=>["home","discover","following","live"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}</nav>
- <div className="sidebar-section"><p className="sidebar-section-label">You</p><nav aria-label="Your library">{nav.filter(item=>["profile","library","later","history"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}<button aria-label="Downloads" className={route.name==='downloads'?'selected':''} onClick={()=>go({name:'downloads'})}><Download size={19}/><span>Downloads</span></button></nav></div>
- <div className="sidebar-section"><nav aria-label="Manage PureTube">{nav.filter(item=>["subscriptions","settings"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}</nav></div>
+ <div className="sidebar-section"><p className="sidebar-section-label">You</p><nav aria-label="Your library">{nav.filter(item=>["library","later","history"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}<button aria-label="Downloads" className={route.name==='downloads'?'selected':''} onClick={()=>go({name:'downloads'})}><Download size={19}/><span>Downloads</span></button></nav></div>
+ <div className="sidebar-section"><nav aria-label="Manage Viddy">{nav.filter(item=>["subscriptions","settings"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}</nav></div>
  {!s.collapsed&&followIds.length>0&&<nav className="sidebar-follows" aria-label="Followed creators"><p>Following</p>{sidebarFollows.slice(0,5).map(id=>{const name=feeds.states[id]?.feed?.title??id;const broadcast=followedLive.states[id];const liveNow=broadcast?.video&&!broadcast.error;return <button key={id} title={liveNow?name+' — live now':name} onClick={()=>go({name:'channel',id})}><CreatorAvatar id={id} name={name}/><span className="follow-name">{name}</span>{liveNow&&<span className="sidebar-live">LIVE</span>}</button>})}{followIds.length>5&&<button onClick={()=>go({name:'subscriptions'})}><span>Show all follows</span></button>}</nav>}
- <div className="sidebar-footer">{s.showTime&&<p title="Playback time since PureTube opened" data-session-seconds={Math.floor(session)}><Clock3 size={16}/><span>{clock(session)} this session</span></p>}
+ <div className="sidebar-footer">{s.showTime&&<p title="Playback time since Viddy opened" data-session-seconds={Math.floor(session)}><Clock3 size={16}/><span>{clock(session)} this session</span></p>}
  <span className="sidebar-flourish" aria-hidden="true">✧</span></div></aside>}
  <main ref={main} className="content" id="main-content">
  {(route.name==='channel'||route.name==='watch')&&!focus&&<button className="back" onClick={back}><ArrowLeft size={16}/> Back</button>}
  {(error||notice)&&<Notice text={error||notice}/>}
  {reminder&&<div className="notice row" role="status"><div className="grow">{reminder}</div><button className="icon small" aria-label="Dismiss reminder" onClick={()=>setReminder('')}><X size={15}/></button></div>}
  {liveAlerts.alerts.map(({id,title})=><div className="notice row wrap" role="status" key={id}><div className="grow"><strong>Now live:</strong> {title}</div><button className="button accent" onClick={()=>{liveAlerts.dismiss(id);go({name:'watch',video:{...linkVideo(id),title,live:true}})}}>Watch live</button><button className="icon small" aria-label="Dismiss live reminder" onClick={()=>liveAlerts.dismiss(id)}><X size={15}/></button></div>)}
- {failed?<Empty title="Could not load your local library" detail="Restart PureTube after checking your Windows app data permissions."/>:!ready?<Loading/>:
+ {failed?<Empty title="Could not load your local library" detail="Restart Viddy after checking your Windows app data permissions."/>:!ready?<Loading/>:
  route.name==='home'?<RecommendationFeed shared={shared} surface="home"/>:
  route.name==='discover'?<Discover shared={shared}/>:
  route.name==='following'?<Quiet shared={shared}/>:
  route.name==='live'?<SearchPage key="live" shared={shared} query="lofi radio" liveOnly liveQuery={route.query} mode={route.mode} onLiveQuery={query=>setRoute({...route,query})} onMode={mode=>setRoute({...route,mode})}/>:
  route.name==='search'?<SearchPage key={route.query} shared={shared} query={route.query} selectedSource={route.source} onSourceChange={source=>setRoute({...route,source})}/>:
- route.name==='profile'?<Profile shared={shared}/>:
+ route.name==='library'?<LibraryStudio shared={shared}/>:
  route.name==='downloads'?<DownloadsPage/>:
- route.name==='settings'?<><Heading label="PREFERENCES" title="Settings" detail="Make PureTube work the way you want."/><Preferences data={data} setting={setting} change={change} updates={updates}/></>:
+ route.name==='settings'?<><Heading label="PREFERENCES" title="Settings" detail="Make Viddy work the way you want."/><Preferences data={data} setting={setting} change={change} updates={updates}/></>:
  route.name==='subscriptions'?<Subscriptions shared={shared}/>:
  route.name==='channel'?<ChannelPage key={route.id} shared={shared} id={route.id} tab={route.tab} setTab={tab=>setRoute({...route,tab})}/>:
- route.name==='watch'?<Watch key={route.video.id} video={route.video} shared={shared} focus={focus} theater={theater} setFocus={setFocus} setTheater={setTheater} onSample={noteSample} onElapsed={seconds=>setSession(s=>s+seconds)} popped={floating?.video.id===route.video.id} returned={returned?.id===route.video.id?returned.start:undefined} onPopout={async(video,start)=>{await invoke('open_player',{payload:{video,start,theme:s.theme,accent:s.accent,autoplay:s.autoplay}});setFloating({video,start})}}/>:<LibraryPage key={route.name} shared={shared} kind={route.name}/>}
+ route.name==='watch'?null:<LibraryPage key={route.name} shared={shared} kind={route.name}/>}
+ {activeVideo&&<Watch key={activeVideo.id} video={activeVideo} shared={shared} focus={route.name==='watch'&&focus} theater={theater} setFocus={setFocus} setTheater={setTheater} onSample={noteSample} onElapsed={seconds=>setSession(s=>s+seconds)} playlist={playlist} onQueueWatch={queueWatch} onQueueClose={()=>setPlaylist(undefined)} onQueueRepeat={()=>setPlaylist(q=>q?{...q,repeat:!q.repeat}:q)} docked={route.name!=='watch'} onRestore={()=>go({name:'watch',video:activeVideo})} onStop={()=>{setActiveVideo(undefined);setPlaylist(undefined);if(floating)void invoke('close_player');setFloating(null)}} popped={floating?.video.id===activeVideo.id} returned={returned?.id===activeVideo.id?returned.start:undefined} onPopout={async(video,start)=>{await invoke('open_player',{payload:{video,start,theme:s.theme,accent:s.accent,autoplay:s.autoplay,playlist}});setFloating({video,start})}}/>}
  {!focus&&route.name!=='settings'&&<footer className="attribution"><button aria-label="Developed with YouTube; open YouTube" onClick={()=>invoke('open_info',{page:'youtube'}).catch(e=>setNotice(errorText(e)))}><img src={s.theme==='dark'?new URL('./youtube-light.png',import.meta.url).href:new URL('./youtube-dark.png',import.meta.url).href} alt="Developed with YouTube"/></button></footer>}
  </main></div>
 }

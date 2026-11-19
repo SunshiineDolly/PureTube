@@ -77,5 +77,11 @@ try{
  assert.equal(await invoke('update_check'),null,'the installed update must recognize it is current')
  const count=Number(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',`@(Get-Process puretube -ErrorAction SilentlyContinue | Where-Object Path -eq '${exe.replaceAll("'","''")}').Count`],{encoding:'utf8',windowsHide:true}).trim())
  assert.equal(count,1,'the updater must restart exactly one app instance')
+ if(expected==='0.12.0'){
+  const migration=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"[pscustomobject]@{Old=(Test-Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PureTube');New=(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Viddy').DisplayName;Version=(Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Viddy').DisplayVersion} | ConvertTo-Json"],{encoding:'utf8',windowsHide:true}))
+  assert.equal(migration.Old,false);assert.equal(migration.New,'Viddy');assert.equal(migration.Version,expected)
+  assert.equal(await value("!!document.querySelector('[aria-label=\"Your profile\"]')"),false)
+  console.log('Viddy name migration verified: one installer registration, no old PureTube entry, no profile link.')
+ }
  console.log('Updated '+oldVersion+' → '+expected+' through Settings: progress displayed, signature verified, automatic restart succeeded, personal data preserved, one app instance running.')
 }finally{ws?.close()}

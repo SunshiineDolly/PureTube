@@ -4,6 +4,7 @@ param(
  [string]$PrivateKeyPath=(Join-Path $env:LOCALAPPDATA 'PureTube\signing\updater.key'),
  [string]$PasswordFile=(Join-Path $env:LOCALAPPDATA 'PureTube\signing\password.dpapi'),
  [string]$NotesPath,
+ [switch]$BundleOnly,
  [uri]$FeedUrl='https://github.com/SunshiineDolly/PureTube/releases/latest/download/latest.json',
  [uri]$AssetBaseUrl
 )
@@ -38,10 +39,16 @@ try {
  $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD=[System.Net.NetworkCredential]::new('',$pass).Password
  $json=@{bundle=@{createUpdaterArtifacts=$true};plugins=@{updater=@{pubkey=$pub;endpoints=@($FeedUrl.AbsoluteUri);requireSignedVersion=$true}}} | ConvertTo-Json -Depth 6
  [IO.File]::WriteAllText($override,$json)
- npm.cmd run tauri build -- --ci --config $override
+ if($BundleOnly){
+  $binary=Get-Item -LiteralPath (Join-Path $repo 'src-tauri/target/release/puretube.exe')
+  if($binary.VersionInfo.ProductVersion -ne $version){throw 'Build the matching application before bundling it.'}
+  npm.cmd run tauri bundle -- --ci --config $override
+ } else {
+  npm.cmd run tauri build -- --ci --config $override
+ }
  if($LASTEXITCODE){throw 'Signed Windows build failed.'}
  $output=Join-Path $repo 'src-tauri/target/release/bundle/nsis'
- $name="PureTube_${version}_x64-setup.exe"
+ $name="$($config.productName)_${version}_x64-setup.exe"
  $installer=Get-Item -LiteralPath (Join-Path $output $name)
  if($installer.VersionInfo.ProductVersion -ne $version){throw 'Installer version does not match the source version.'}
  $signature=(Get-Content -LiteralPath ($installer.FullName+'.sig') -Raw).Trim()

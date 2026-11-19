@@ -35,7 +35,7 @@ export function recommendationPlan(data:Library,surface:Surface,seed:number){
 
 export function rankRecommendations(items:Video[],data:Library,seen:Record<string,number>,seed:number,excluded:Set<string>,limit=48){
  const now=Date.now(),watched=data.settings.history?data.history:{}
- const candidates=unique(items).filter(v=>!v.live&&!v.scheduledAt&&!excluded.has(v.id)&&!data.dismissed.includes(v.id)&&!watched[v.id]&&visible(v,data.settings))
+ const candidates=unique(items).filter(v=>!v.live&&!v.scheduledAt&&!excluded.has(v.id)&&!data.dismissed.includes(v.id)&&!watched[v.id]&&!(data.settings.progress&&data.progress[v.id]?.at>0)&&visible(v,data.settings))
  const score=(v:Video)=>{
    const exposure=seen[v.id]??0
    const penalty=exposure?Math.max(0,1-(now-exposure)/86_400_000)*1000:0

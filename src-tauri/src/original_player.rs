@@ -33,10 +33,10 @@ pub async fn original_player(app: tauri::AppHandle, id: String, dark: bool) -> R
         return Ok(());
     }
     let window=tauri::WebviewWindowBuilder::new(&app,"original-player",tauri::WebviewUrl::External(url))
- .title("PureTube — YouTube playback").theme(Some(if dark{tauri::Theme::Dark}else{tauri::Theme::Light})).inner_size(1100.,760.).min_inner_size(650.,450.)
+ .title("Viddy — YouTube playback").theme(Some(if dark{tauri::Theme::Dark}else{tauri::Theme::Light})).inner_size(1100.,760.).min_inner_size(650.,450.)
  .on_navigation(|url|url.scheme()=="https"&&url.username().is_empty()&&url.password().is_none()&&matches!(url.host_str(),Some("www.youtube.com"|"consent.youtube.com")))
  .initialization_script("(()=>{const add=()=>{if(document.getElementById('puretube-original-style'))return;const style=document.createElement('style');style.id='puretube-original-style';style.textContent='ytd-mini-guide-renderer,ytd-guide-renderer,ytd-reel-shelf-renderer,ytd-rich-shelf-renderer[is-shorts],#secondary{display:none!important}ytd-watch-flexy:not([fullscreen]) #primary{max-width:1500px!important;margin:auto!important}';(document.head||document.documentElement)?.appendChild(style)};new MutationObserver(add).observe(document,{childList:true,subtree:true});add()})()")
- .build().map_err(|_|"Could not open YouTube playback inside PureTube.")?;
+ .build().map_err(|_|"Could not open YouTube playback inside Viddy.")?;
     #[cfg(windows)]
     window
         .with_webview(|v| {

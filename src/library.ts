@@ -29,7 +29,7 @@ function entries<T>(v:unknown, id:(s:string)=>boolean, value:(x:unknown)=>x is T
 }
 export function decode(raw:unknown):Library {
  const r = record(raw)
- if (r.version!==1) throw new Error('This is not a supported PureTube backup.')
+ if (r.version!==1) throw new Error('This is not a supported Viddy backup.')
  const s=record(r.settings), d=empty(), settings=d.settings
  const choices = {theme:['dark','light'],density:['compact','comfortable']} as const
  for (const k of Object.keys(choices) as (keyof typeof choices)[]) {

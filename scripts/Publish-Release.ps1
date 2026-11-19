@@ -7,7 +7,8 @@ $api = "https://api.github.com/repos/$name"
 $version = (Get-Content (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version
 $tag = "v$version"
 $bundle = Join-Path $repo 'src-tauri/target/release/bundle/nsis'
-$installer = "PureTube_${version}_x64-setup.exe"
+$appName = (Get-Content (Join-Path $repo 'src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json).productName
+$installer = "${appName}_${version}_x64-setup.exe"
 $files = @($installer, "$installer.sig", 'latest.json', 'SHA256SUMS.txt')
 $manifest = Get-Content (Join-Path $bundle 'latest.json') -Raw | ConvertFrom-Json
 $artifact = $manifest.platforms.'windows-x86_64'
@@ -51,7 +52,7 @@ try {
     if ($newer.Count) { throw 'A newer release already exists; Latest was not changed' }
     $existing = @($releases | Where-Object tag_name -CEQ $tag)
     if ($existing.Count -gt 1) { throw 'Duplicate releases for one version' }
-    $release = if ($existing.Count) { $existing[0] } else { Request Post "$api/releases" @{tag_name=$tag;target_commitish=$head;name="PureTube $version";body=$notes;draft=$true;prerelease=$false} }
+    $release = if ($existing.Count) { $existing[0] } else { Request Post "$api/releases" @{tag_name=$tag;target_commitish=$head;name="$appName $version";body=$notes;draft=$true;prerelease=$false} }
     if (@($release.assets | Where-Object name -NotIn $files).Count) { throw 'Unexpected assets on this release; nothing was removed' }
     foreach ($file in $files) {
         if ($file -in @($release.assets.name)) { continue }

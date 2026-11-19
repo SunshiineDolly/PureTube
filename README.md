@@ -1,13 +1,13 @@
-# PureTube
+# Viddy
 
-PureTube is a Windows desktop app for watching recent uploads from the YouTube channels you follow. Public feeds and the official embedded player work without a Google sign-in or API key.
+Viddy (formerly PureTube) is a Windows desktop app for watching recent uploads from the YouTube channels you follow. Public feeds and the official embedded player work without a Google sign-in or API key.
 
 [Download the latest Windows version](https://github.com/SunshiineDolly/PureTube/releases/latest) · [All releases](https://github.com/SunshiineDolly/PureTube/releases)
 
 ## Install and start
 
-1. Download the latest **PureTube_*_x64-setup.exe** from GitHub Releases and run it. It installs for the current Windows user. Start Menu integration is automatic, and you can pin the running app to the taskbar.
-2. Open **Your profile** to set an optional display name. No account, API key, or cloud setup is needed.
+1. Download the latest **Viddy_*_x64-setup.exe** from GitHub Releases and run it. It installs for the current Windows user. Start Menu integration is automatic, and you can pin the running app to the taskbar.
+2. No account, API key, or cloud setup is needed. Your existing local follows, playlists, and preferences are retained when upgrading from PureTube.
 3. Open **Following**. PureTube checks followed channels on launch, every five minutes while open, and when it regains focus after a missed check. **Refresh** checks immediately. You can also paste a YouTube video link into the top bar and press Enter.
 4. In **Manage follows**, paste a `UC...` channel ID, an ID-based `youtube.com/channel/...` URL, or a public feed URL. If the address bar shows an @handle, use the creator's **About → Share channel → Copy channel ID**.
 
@@ -17,6 +17,11 @@ This personal build has no Authenticode signature. Install only a copy you built
 The browsing layout uses a bright play-mark wordmark, icon category pills, grouped navigation, and larger thumbnails. Eight palettes are available in both light and dark modes.
 
 ## Everyday use
+
+- **Library playlists** have cover cards, Play all, Shuffle, rename/delete, add-by-link, filtering, sorting, drag reordering, and move-up/down controls. Collections from older versions become playlists automatically. Playlist playback has previous/next, repeat, and automatic advancement.
+- **In-app mini player** keeps the same player alive when you browse away from a video. Restore or close it, and open its queue. Add videos to the queue from browsing cards. The separate pop-out remains available. Both players avoid page scrollbars.
+- **Unwatched recommendations** exclude videos in history or saved progress, deduplicate titles, and mix related topics, creators, and public YouTube watch-page recommendations. Manually selected playlists can intentionally replay saved videos.
+
 
 - **Following** shows uploads only from creators you follow, newest first. Scrolling fetches older uploads from their public channel pages, beyond the short Atom feed. Filter by creator or date and refresh manually. Live broadcasts remain in their separate shelf.
 - **Home and Discover** have different feeds. Home queries a rotating set of topics, balances creators and genres, and deprioritizes previously displayed videos. **New mix** rotates query sources, and **Not interested** removes a video from recommendations. Watched videos are excluded when history is on. Following is for channels you follow. Discover has a separate recommendation mix and topic browsing. Recommendation exposure records stay on this PC; Settings can reset recommendations.
@@ -31,7 +36,7 @@ The browsing layout uses a bright play-mark wordmark, icon category pills, group
 - **Followed creators live now** are checked on their public channel live pages every 45 seconds while PureTube is visible and on return to the app. Active streams are shown above regular uploads on Home, Following, and Live, and marked in the sidebar. Very large follow lists are checked in rotating batches. A failed check retains the prior result internally but does not present it as confirmed live.
 - **Live** separates current streams from scheduled events. Select **Remind me** to get an in-app notice when YouTube confirms the stream has gone live; PureTube must be running to check. Countdown times come from YouTube. **Go live** reconnects to the current broadcast position. YouTube live chat appears beside the player as a read-only viewer, with hide/show and reload controls. The sign-in input is removed, chat links cannot navigate out, and chat popups are blocked. A channel’s **Past streams** tab is for replays.
 - **Creator pages** show the creator’s public banner, bio, and video shelves when available, plus Videos, Past streams, and About tabs. An active broadcast has a prominent LIVE NOW label and Watch live panel above every tab, using the same status as the sidebar. Videos and Past streams fetch older public uploads as you scroll.
-- **Library** includes Favorites and custom collections. Watch Later and History have their own pages; History has an Unfinished filter. Create a collection from Library, then add videos from the watch page. Importing a PureTube JSON backup replaces the current library and preferences; export first if you want to keep both versions.
+- **Library** includes Favorites and personal playlists. Watch Later and History have their own pages; History has an Unfinished filter. Create a playlist from Library, then add videos by link or from the watch page. Importing a PureTube JSON backup replaces the current library and preferences; export first if you want to keep both versions.
 - **Settings** includes eight light and dark palettes, content filters, Quiet Session, local privacy controls, watching reminders, launch on Windows startup, and minimize to tray. The tray menu can reopen or quit the app. Closing the window quits PureTube and removes its active tray icon. Launching again restores the existing window when it is already running, including when minimized to the tray. History and resume tracking can be disabled independently and existing history/progress cleared separately.
 
 ## Build from source
@@ -54,9 +59,9 @@ npm.cmd run tauri build -- --ci
 
 The executable is in `src-tauri/target/release/puretube.exe`. Versioned installers are in `src-tauri/target/release/bundle/nsis/`. Tauri downloads its packaging tools when needed. Builds trust the checked-in public update key. Publishing a new update requires its matching private key; ordinary builds do not produce signed update artifacts.
 
-## Watch pages and personal preferences
+## Watch pages and preferences
 
-Read public comments and replies below videos; choose Top or Newest and scroll to load more. The local profile stores a display name, bio, avatar, chosen recommendation topics, and viewing insights. History has an Unfinished filter; Library contains Favorites and collections.
+Read public comments and replies below videos; choose Top or Newest and scroll to load more. The personal profile page has been removed. History has an Unfinished filter; Library contains Favorites and collections.
 
 Downloads lets you choose the destination folder and default quality. Remove from list and Clear finished entries preserve files. Delete file explicitly deletes the recorded video; cancelled entries can remove partial files. Folder changes apply to new downloads.
 
@@ -102,3 +107,7 @@ node tests/windows-smoke.mjs
 ```
 
 It checks shortcuts, runs PureTube with a temporary profile, verifies the profile name and theme after relaunch, checks that Manage follows has no groups or CSV import, and uninstalls the test copy. Set `PURETUBE_LIVE_SMOKE=1` to also check real feeds, in-app public search, local search, the carousel, sharing, and playback. Rust tests cover the public search URL and result parser.
+
+The app is now named Viddy. The repository, update URL, internal executable name, and app-data identifier remain compatible with PureTube so existing installations can upgrade without losing data.
+
+Current playlist, docking, and pop-out verification: `node tests/viddy-playlists-smoke.mjs`. This uses a temporary profile and does not overwrite the installed app’s library.

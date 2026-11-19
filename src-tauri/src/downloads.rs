@@ -48,12 +48,12 @@ impl Downloads {
         jobs.truncate(200);
         for job in &mut jobs {
             if job.directory.is_empty() {
-                job.directory = root.to_string_lossy().into_owned();
+                job.directory = restored_directory(job, &root);
             }
             if matches!(job.status.as_str(), "preparing" | "downloading" | "merging") {
                 job.status = "interrupted".into();
                 job.message =
-                    "PureTube closed before this download finished. Try again to resume.".into();
+                    "Viddy closed before this download finished. Try again to resume.".into();
             }
         }
         let preferences: Value = fs::read(record.with_file_name("download-preferences.json"))
@@ -172,7 +172,7 @@ fn prepare(
         .map_err(|_| "Invalid download tool manifest.")?;
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(300))
-        .user_agent("PureTube-downloads")
+        .user_agent("Viddy-downloads")
         .build()
         .map_err(|_| "Could not initialize download setup.")?;
     let mut executables = HashMap::new();
@@ -411,7 +411,7 @@ fn worker(app: tauri::AppHandle, id: String) -> Result<()> {
         return Ok(());
     }
     if !status.success() || output.is_none() {
-        return Err(if error.contains("Sign in")||error.contains("sign in"){ "YouTube requires sign-in for this download. PureTube downloads public, unrestricted videos without account cookies." }else if error.contains("unavailable")||error.contains("not available"){ "This video is not available for download." }else{"The video could not be downloaded. Check your connection and disk space, then try again."}.into());
+        return Err(if error.contains("Sign in")||error.contains("sign in"){ "YouTube requires sign-in for this download. Viddy downloads public, unrestricted videos without account cookies." }else if error.contains("unavailable")||error.contains("not available"){ "This video is not available for download." }else{"The video could not be downloaded. Check your connection and disk space, then try again."}.into());
     }
     state.update(&app, &id, "complete", 100., "Download complete", output);
     Ok(())
@@ -651,4 +651,26 @@ pub fn download_clear_finished(app: tauri::AppHandle, state: State<Downloads>) -
     .map_err(|_| "Could not clear the downloads list.")?;
     let _ = app.emit_to("main", "downloads-changed", &*jobs);
     Ok(())
+}
+
+fn restored_directory(job: &Job, root: &Path) -> String {
+    job.file
+        .as_ref()
+        .and_then(|file| Path::new(file).parent())
+        .filter(|path| path.is_absolute())
+        .unwrap_or(root)
+        .to_string_lossy()
+        .into_owned()
+}
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+    #[test]
+    fn legacy_downloads_keep_their_original_folder_after_renaming() {
+        let mut job:Job=serde_json::from_value(json!({"id":"job","video_id":"jNQXAC9IVRw","title":"Video","status":"complete","percent":100,"message":"Saved","file":r"C:\Downloads\PureTube\Video [jNQXAC9IVRw].mp4","quality":1080})).unwrap();
+        let renamed = Path::new(r"C:\Downloads\Viddy");
+        assert_eq!(restored_directory(&job, renamed), r"C:\Downloads\PureTube");
+        job.file = None;
+        assert_eq!(restored_directory(&job, renamed), renamed.to_string_lossy());
+    }
 }

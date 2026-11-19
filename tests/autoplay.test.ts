@@ -41,3 +41,14 @@ test('explicit profile topics shape autoplay with history disabled',()=>{
  const a=video('a0000000000','a','Travel'),b=video('b0000000000','b','Food')
  assert.equal(nextVideos(video('current0000','c','Music'),[a,b],data)[0].id,b.id)
 })
+
+test('Up next never promotes watched or started videos even from followed creators',()=>{
+ const data=empty();data.follows=['followed'];const watched=video('seen0000000','followed'),started=video('begun000000','followed'),fresh=video('fresh000000','other')
+ data.history[watched.id]=Date.now();data.progress[started.id]={at:2,duration:60,updated:Date.now()}
+ assert.deepEqual(nextVideos(video('current0000'),[watched,started,fresh],data).map(v=>v.id),[fresh.id])
+})
+
+test('public watch-page recommendations outrank generic matches while keeping watched videos excluded',()=>{
+ const data=empty(),current=video('current0000','current','Music'),generic=video('generic0000','a','Travel'),related=video('related0000','b','Travel'),watched=video('watched0000','c','Music');data.history[watched.id]=Date.now()
+ assert.deepEqual(nextVideos(current,[generic,related,watched],data,[],[related.id,watched.id]).map(v=>v.id),[related.id,generic.id])
+})

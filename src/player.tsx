@@ -88,7 +88,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
          if(e.data===0 || e.data===2) sample(true)
          if(e.data===0&&!live)callbacks.current.onEnded?.()
        },
-       onError:e=>{if(closed)return;count(false);if([101,150].includes(e.data))callbacks.current.onRestricted?.();setError(e.data===153?'YouTube couldn’t play this video in PureTube. Try another result.':[101,150].includes(e.data)?'The creator has disabled embedded playback.':e.data===100?'This video is unavailable or private.':'YouTube could not play this video here.')}
+       onError:e=>{if(closed)return;count(false);if([101,150].includes(e.data))callbacks.current.onRestricted?.();setError(e.data===153?'YouTube couldn’t play this video in Viddy. Try another result.':[101,150].includes(e.data)?'The creator has disabled embedded playback.':e.data===100?'This video is unavailable or private.':'YouTube could not play this video here.')}
      }})
    }).catch(e=>{if(!closed) setError(String(e.message??e))})
    const flush=()=>{if(played) sample(true)}
