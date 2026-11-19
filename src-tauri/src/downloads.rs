@@ -305,13 +305,20 @@ fn worker(app: tauri::AppHandle, id: String) -> Result<()> {
     } else {
         format!("[height<={}]", job.quality)
     };
-    let format = format!("bv*{height}[ext=mp4]+ba[ext=m4a]/b{height}[ext=mp4]/b{height}");
+    // Restricting audio to m4a can select a forbidden URL even when other streams work.
+    // Probe candidates first and let FFmpeg merge the best reachable streams into MP4.
+    let format = format!("bv*{height}+ba/b{height}");
     let mut cmd = Command::new(&tools["yt-dlp.exe"]);
     cmd.args([
         "--ignore-config",
         "--no-playlist",
         "--no-cache-dir",
         "--no-warnings",
+        "--check-formats",
+        "--concurrent-fragments",
+        "4",
+        "--progress-delta",
+        "0.5",
         "--newline",
         "--progress",
         "--progress-template",

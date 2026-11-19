@@ -11,6 +11,7 @@ import {FollowedLiveShelf} from './followed-live'
 import {recommendationIds,useRecommendations} from './use-recommendations'
 import type {Surface} from './recommendations'
 import {CategoryRail} from './category-rail'
+import {RandomWatch} from './random-watch-button'
 
 export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surface}){
  const {feed,target,refresh,more,hasMore}=useRecommendations(surface,shared.data)
@@ -20,10 +21,10 @@ export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surfa
  return <div className="studio-discover recommendations" ref={target}>
    {surface==='home'&&<div className="heading home-browse-heading"><h1 className="sr-only">Home</h1><CategoryRail names={railTopics} selected={topic} onSelect={setTopic}/><button className="button new-mix-button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16} className={feed?.busy?'spin':undefined}/> New mix</button></div>}
    {surface==='home'&&<FollowedLiveShelf shared={shared}/>}
-   {surface==='discover'&&<div className="row recommendation-toolbar"><p>Explore beyond your usual creators.</p><button className="button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16}/> New mix</button></div>}
+   <div className="row recommendation-toolbar"><p>{surface==='discover'?'Explore beyond your usual creators.':'A surprise shaped by what you watch.'}</p><RandomWatch items={videos??[]} shared={shared} surface={surface}/>{surface==='discover'&&<button className="button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16}/> New mix</button>}</div>
    {topic==='All'?<>
    {!videos?.length&&feed?.busy?<Loading/>:videos?.length?<section className="studio-shelf" aria-label="Recommended videos"><Grid shared={shared} items={videos} extra={v=><div className="recommendation-reason"><span>{v.category}</span><button title="Remove this recommendation" onClick={()=>shared.change(d=>({...d,dismissed:[...new Set([...d.dismissed,v.id])].slice(-5000)}))}>Not interested</button></div>}/></section>:feed?.error?<><Notice text={feed.error}/><button className="button" onClick={refresh}>Try again</button></>:<Empty title="Time for something new" detail="Refresh the mix for new topics and creators." action={<button className="button" onClick={refresh}>New mix</button>}/>}
-   <AutoMore enabled={hasMore} busy={!!feed?.busy} error={feed?.moreError} onReach={()=>void more()}/></>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={[]}/>}
+   <AutoMore enabled={hasMore} busy={!!feed?.busy} error={feed?.moreError} onReach={()=>void more()}/></>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={[]} surface={surface}/>}
  </div>
 }
 
@@ -60,13 +61,14 @@ export function Discover({shared}:{shared:Shared}){
  </div>
 }
 
-function TopicCatalog({topic,shared,exclude}:{topic:string;shared:Shared;exclude:readonly string[]}){
+function TopicCatalog({topic,shared,exclude,surface="discover"}:{topic:string;shared:Shared;exclude:readonly string[];surface?:Surface}){
  const catalog=useCatalog(topicQuery(topic),'latest')
  const skipped=new Set(exclude)
  const homeIds=recommendationIds('home')
  const videos=catalog.items?.filter(v=>!homeIds.has(v.id)&&!skipped.has(v.channelId)&&!shared.data.dismissed.includes(v.id)&&visible(v,shared.data.settings)).sort(publicNewest).map(v=>({...v,category:topic}))
  const lead=videos?.[0]
  return <section className="studio-shelf topic-catalog" aria-label={`${topic} videos`}>
+   <div className="row recommendation-toolbar"><RandomWatch items={videos??[]} shared={shared} surface={surface}/></div>
    {catalog.error?<><Notice text={catalog.error}/><button className="button" onClick={catalog.reload}>Try again</button></>:
     !videos?<Loading/>:lead?<><article className="topic-feature">
        <button className="thumbnail" aria-label={'Watch '+lead.title} onClick={()=>shared.watch(lead)}><img src={lead.image} alt=""/></button>

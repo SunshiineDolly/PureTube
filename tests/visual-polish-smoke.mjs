@@ -38,13 +38,9 @@ try{
  await value(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Preview intro').click()`)
  if(!await value('matchMedia("(prefers-reduced-motion: reduce)").matches')){await eventually(()=>value('!!document.querySelector(".brand-intro")'),5000);assert.equal(await value('getComputedStyle(document.querySelector(".brand-intro")).pointerEvents'),'none');await eventually(()=>value('!document.querySelector(".brand-intro")'),5000)}
  await value(`(()=>{const i=document.querySelector('.searchbar input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'https://www.youtube.com/watch?v=jNQXAC9IVRw');i.dispatchEvent(new Event('input',{bubbles:true}))})()`);await value('document.querySelector(".searchbar").requestSubmit()')
- await eventually(()=>value('document.querySelector(".viddy-seek-track input")?.disabled===false'),45000)
- await eventually(()=>value('document.querySelector(".seek-play")?.getAttribute("aria-label")==="Pause video"'),30000)
- await value('document.querySelector(".seek-play").click()');await eventually(()=>value('document.querySelector(".seek-play").getAttribute("aria-label")==="Play video"'))
- await value(`(()=>{const i=document.querySelector('.viddy-seek-track input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'8');i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}))})()`)
- await wait(2200)
- assert.ok(await value('Math.abs(Number(document.querySelector(".viddy-seek-track input").value)-8)<1.5'),'custom seeking must be confirmed by the actual player time')
- await value('document.querySelector(".viddy-transport").scrollIntoView()');const shot=await call('Page.captureScreenshot',{format:'png'});writeFileSync(resolve('src-tauri/target/Viddy-0.13-seekbar.png'),Buffer.from(shot.data,'base64'))
- console.log('Focused check passed: themed cursor, non-blocking/reduced-motion intro, real pause and seek to 0:08 through the custom bar.')
+ await eventually(()=>value('!!document.querySelector(".player iframe")'),45000)
+ assert.equal(await value('!!document.querySelector(".viddy-transport")'),false)
+ assert.equal(await value('new URL(document.querySelector(".player iframe").src).searchParams.get("controls")'),'1')
+ console.log('Focused visual check passed: themed cursor, non-blocking intro and standard YouTube controls.')
 }catch(error){try{console.log('Failure: '+await value('document.body.innerText.slice(-1500)'))}catch{}throw error}
 finally{try{await value('setTimeout(()=>document.querySelector(".window-close").click(),100)');await eventually(()=>child.exitCode!==null,10000)}catch{child.kill()}ws?.close();assert.ok(root.startsWith(join(process.env.TEMP,'puretube-features-')));rmSync(root,{recursive:true,force:true,maxRetries:8,retryDelay:300})}

@@ -12,6 +12,7 @@ import {useChannelCatalog} from './catalog'
 import {CreatorAvatar} from './creator-avatar'
 import {invoke} from '@tauri-apps/api/core'
 import {FollowedLiveShelf,useFollowedLive,type FollowedLive} from './followed-live'
+import {RandomWatch} from './random-watch-button'
 
 export type Shared = {data:Library;change:(fn:(d:Library)=>Library)=>void;playNext:(v:Video)=>void;enqueue:(v:Video)=>void;playPlaylist:(name:string,ids:string[],index?:number)=>void;watch:(v:Video)=>void;channel:(id:string)=>void;follow:(id:string)=>void;subscriptions:()=>void;discover:()=>void;feeds:PublicFeeds;followIds:string[];live:FollowedLive}
 export function Grid({shared,items,isNew=false,extra}:{shared:Shared;items:Video[];isNew?:boolean;extra?:(v:Video)=>React.ReactNode}) {
@@ -37,6 +38,7 @@ export function Quiet({shared}:{shared:Shared}) {
  const failed=states.filter(s=>s.error)
  const stale=failed.some(s=>s.feed)
  return <><FollowedLiveShelf shared={shared}/><Heading label="" title="Following" detail={'Recent uploads from followed creators. Checks every '+REFRESH_MINUTES+' minutes while Viddy is open.'}>
+ <RandomWatch items={items} shared={shared} surface="following"/>
  <button className="button" onClick={shared.subscriptions}><Plus size={16}/> Follow a channel</button>
  {allowed.length>0&&<button className="button" disabled={feeds.busy} onClick={()=>{
    change(d=>({...d,checked:{...d.checked,...Object.fromEntries(allowed.flatMap(id=>{const at=feeds.states[id]?.feed?.checkedAt;return at?[[id,new Date(at).toISOString()]]:[]}))}}))

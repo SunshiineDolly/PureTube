@@ -54,7 +54,7 @@ try{
  await shot('queue-and-recommendations')
  await value('document.querySelector(".player iframe").dataset.persistent="yes"');await navigate('Library')
  await eventually(()=>value('!!document.querySelector(".watch-docked")'))
- assert.ok(await value("document.querySelector('[aria-label=\"Return to video page\"]').textContent.includes('Return to video')"))
+ assert.ok(await value("document.querySelector('[aria-label=\"Return to video page\"]').querySelector('svg')!==null"))
  await value(`document.querySelector('[aria-label="Return to video page"]').click()`)
  await eventually(()=>value('!!document.querySelector(".watch:not(.watch-docked)")'));assert.equal(await value('document.querySelector(".player iframe").dataset.persistent'),'yes')
  console.log('Up next grew past 24 by scrolling; recommendations stayed available beside the queue; Add to queue and explicit Return preserved playback.')
