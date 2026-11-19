@@ -704,6 +704,9 @@ pub async fn channel_videos(
 
 fn channel_photo(data: &Value) -> Option<String> {
     avatar(&data["metadata"]["channelMetadataRenderer"]["avatar"]["thumbnails"][0]["url"])
+        .or_else(|| avatar(&data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"][0]["url"]))
+        .or_else(|| find_named(&data["header"], "decoratedAvatarViewModel", 20).and_then(|v| find_avatar(v, 16)))
+        .or_else(|| find_named(&data["header"], "avatarViewModel", 20).and_then(|v| find_avatar(v, 16)))
 }
 
 #[tauri::command]

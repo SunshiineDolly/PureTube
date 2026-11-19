@@ -67,15 +67,15 @@ export function useRecommendations(surface:Surface,data:Library){
        if(!active||generation.current!==run)return
        successes++;sources[index]={...source,next:page.next}
        pool.push(...page.items.map(v=>({...v,category:source.topic})))
-       const items=rankRecommendations(pool,current.current,seen,seed,other(),48,surface)
+       const items=rankRecommendations(pool,current.current,seen,seed,other(),surface==='home'?72:96,surface)
        // Keep already-visible cards in place while the other requests finish.
        const displayed=successes===1?[]:sessionRef.current?.items??[]
-       store({items:appendRecommendations(displayed,items,60),sources:[...sources],seed,at:Date.now(),busy:pending>1})
+       store({items:appendRecommendations(displayed,items,surface==='home'?96:144),sources:[...sources],seed,at:Date.now(),busy:pending>1})
      },error=>{
        if(active&&generation.current===run&&successes===0)store({...sessionRef.current!,error:errorText(error),busy:pending>1})
      }).finally(()=>{
        pending--
-       if(active&&generation.current===run&&pending===0)store({...sessionRef.current!,items:successes?rankRecommendations(pool,current.current,seen,seed,other(),90,surface):sessionRef.current!.items,busy:false,error:successes?undefined:sessionRef.current?.error})
+       if(active&&generation.current===run&&pending===0)store({...sessionRef.current!,items:successes?rankRecommendations(pool,current.current,seen,seed,other(),surface==='home'?96:144,surface):sessionRef.current!.items,busy:false,error:successes?undefined:sessionRef.current?.error})
      })
    }
    return ()=>{active=false;generation.current++}
@@ -104,7 +104,7 @@ export function useRecommendations(surface:Surface,data:Library){
      for(let skip=0;!candidates.length&&page.next&&skip<2;skip++){
        const cursor=page.next
        page=await requestCatalog(source.query,source.filter,cursor)
-       candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,base.seed,exclusions,30)
+       candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,base.seed,exclusions,30,surface)
        if(page.next?.token===cursor.token){page={...page,next:null};break}
      }
      if(generation.current!==run)return

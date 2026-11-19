@@ -26,7 +26,7 @@ export function recommendationPlan(data:Library,surface:Surface,seed:number){
  const chosen=unique([
    ...Array.from({length:Math.min(surface==='home'?2:1,preferred.length)},(_,i)=>{const t=preferred[(seed+i)%preferred.length];return {...t,id:t.name}}),
    ...shuffled.map(t=>({...t,id:t.name})),
- ]).slice(0,4)
+ ]).slice(0,surface==='home'?6:8)
  const plan:{topic:string;query:string;filter:'all'|'latest'}[]=chosen.map((t,index)=>{
    const options=alternatives[t.name]??[topicQuery(t.name),topicQuery(t.name)+' documentary',topicQuery(t.name)+' ideas']
    return {topic:t.name,query:options[(seed+index)%options.length],filter:(index%2===0?'all':'latest') as 'all'|'latest'}

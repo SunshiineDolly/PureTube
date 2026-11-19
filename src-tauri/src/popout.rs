@@ -22,7 +22,15 @@ pub async fn open_player(
     if !valid_video(&payload["video"]) || payload.to_string().len() > 300_000 {
         return Err("Invalid player video.".into());
     }
-    *state.0.lock().map_err(|_| "Player is busy.")? = payload.clone();
+    let mut payload=payload;
+    {
+        let mut previous=state.0.lock().map_err(|_| "Player is busy.")?;
+        if app.get_webview_window("player").is_some() {
+            payload["pinned"]=previous["pinned"].clone();
+            payload["lockedPosition"]=previous["lockedPosition"].clone();
+        } else { payload["pinned"]=json!(false); }
+        *previous=payload.clone();
+    }
     if let Some(window) = app.get_webview_window("player") {
         let _ = app.emit_to("player", "player-load", &payload);
         let _ = window.show();
@@ -42,7 +50,7 @@ pub async fn open_player(
     .inner_size(640., 440.)
     .min_inner_size(360., 260.)
     .resizable(true)
-    .always_on_top(true)
+    .always_on_top(false)
     .build()
     .map_err(|_| "Could not open the mini player.")?;
     #[cfg(windows)]
@@ -68,13 +76,29 @@ pub fn close_player(app: tauri::AppHandle) -> Result<()> {
     Ok(())
 }
 #[tauri::command]
-pub fn player_pin(window: tauri::WebviewWindow, pinned: bool) -> Result<()> {
+pub fn player_pin(window: tauri::WebviewWindow, state: State<PlayerState>, pinned: bool) -> Result<()> {
     if window.label() != "player" {
         return Err("Pinning is only available in the mini player.".into());
     }
+    let position=window.outer_position().map_err(|_| "Could not read the player position.")?;
     window
         .set_always_on_top(pinned)
-        .map_err(|_| "Could not change the player pin.".into())
+        .map_err(|_| "Could not change the player pin.")?;
+    window.set_resizable(!pinned).map_err(|_| "Could not lock the player size.")?;
+    let mut payload=state.0.lock().map_err(|_| "Player is busy.")?;
+    payload["pinned"]=json!(pinned);
+    payload["lockedPosition"]=if pinned { json!({"x":position.x,"y":position.y}) } else {Value::Null};
+    Ok(())
+}
+pub fn hold_position(window: &tauri::Window, position: &tauri::PhysicalPosition<i32>) {
+    let target=window.try_state::<PlayerState>().and_then(|state| {
+        let payload=state.0.lock().ok()?;
+        if payload["pinned"]!=true {return None;}
+        Some((i32::try_from(payload["lockedPosition"]["x"].as_i64()?).ok()?,i32::try_from(payload["lockedPosition"]["y"].as_i64()?).ok()?))
+    });
+    if let Some((x,y))=target {
+        if position.x!=x||position.y!=y {let _=window.set_position(tauri::PhysicalPosition::new(x,y));}
+    }
 }
 #[tauri::command]
 pub fn player_video(app: tauri::AppHandle, state: State<PlayerState>, video: Value) -> Result<()> {

@@ -289,6 +289,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .on_window_event(|window, event| {
             if window.label() == "player" {
+                if let tauri::WindowEvent::Moved(position) = event { popout::hold_position(window, position); }
                 if matches!(event, tauri::WindowEvent::Destroyed) {
                     popout::closed(window.app_handle());
                 }

@@ -35,7 +35,7 @@ test('a new mix rotates query sources while retaining a learned interest',()=>{
  const data=empty();data.interests.Gaming=12
  const first=recommendationPlan(data,'home',104)
  const second=recommendationPlan(data,'home',105)
- assert.equal(new Set(first.map(s=>s.topic)).size,4)
+ assert.equal(new Set(first.map(s=>s.topic)).size,6)
  assert.ok(first.some(s=>s.topic==='Gaming'))
  assert.notDeepEqual(first.map(s=>s.query),second.map(s=>s.query))
  assert.notDeepEqual(first.map(s=>s.query),recommendationPlan(data,'discover',104).map(s=>s.query))
