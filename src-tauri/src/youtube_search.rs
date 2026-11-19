@@ -26,7 +26,7 @@ fn search_url(query: &str, filter: &str) -> Result<Url> {
     Ok(url)
 }
 
-fn text(value: &Value) -> String {
+pub(crate) fn text(value: &Value) -> String {
     value["simpleText"]
         .as_str()
         .map(str::to_owned)
@@ -47,7 +47,7 @@ fn valid_id(id: &str, len: usize) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
-fn avatar(value: &Value) -> Option<String> {
+pub(crate) fn avatar(value: &Value) -> Option<String> {
     let raw = value.as_str()?;
     let normalized = if raw.starts_with("//") {
         format!("https:{raw}")
@@ -347,7 +347,7 @@ pub async fn watch_creator(state: State<'_, AppData>, id: String) -> Result<Valu
     Ok(
         json!({"id":channel,"name":details["author"].as_str().or_else(||metadata["ownerChannelName"].as_str()).unwrap_or("Creator"),
        "date":metadata["publishDate"].as_str().unwrap_or_default(),"title":details["title"].as_str().unwrap_or_default(),
-       "live":is_live(&data),"embeddable":data["playabilityStatus"]["playableInEmbed"]!=false}),
+       "live":is_live(&data),"upcoming":data["videoDetails"]["isUpcoming"]==true,"embeddable":data["playabilityStatus"]["playableInEmbed"]!=false,"description":details["shortDescription"].as_str().unwrap_or_default(),"views":details["viewCount"].as_str().map(|v|format!("{v} views")).unwrap_or_default(),"duration":details["lengthSeconds"].as_str().and_then(|v|v.parse::<u64>().ok()).unwrap_or(0)}),
     )
 }
 
@@ -390,7 +390,7 @@ pub async fn channel_live(state: State<'_, AppData>, id: String) -> Result<Optio
     ))
 }
 
-fn initial_data(html: &str) -> Result<Value> {
+pub(crate) fn initial_data(html: &str) -> Result<Value> {
     embedded_json(html, "var ytInitialData")
 }
 fn embedded_json(html: &str, variable: &str) -> Result<Value> {
@@ -500,7 +500,7 @@ pub async fn live_status(state: State<'_, AppData>, id: String) -> Result<&'stat
     )
 }
 
-fn client_version(html: &str) -> &str {
+pub(crate) fn client_version(html: &str) -> &str {
     html.split_once("\"INNERTUBE_CLIENT_VERSION\":\"")
         .and_then(|(_, tail)| tail.split_once('"'))
         .map(|(v, _)| v)
@@ -795,11 +795,11 @@ pub async fn channel_profile(state: State<'_, AppData>, id: String) -> Result<Va
     )
 }
 
-async fn public_page(client: &reqwest::Client, url: Url) -> Result<String> {
+pub(crate) async fn public_page(client: &reqwest::Client, url: Url) -> Result<String> {
     read_page(client.get(url).header(reqwest::header::ACCEPT, "text/html")).await
 }
 
-async fn read_page(request: reqwest::RequestBuilder) -> Result<String> {
+pub(crate) async fn read_page(request: reqwest::RequestBuilder) -> Result<String> {
     let mut response = request
         .send()
         .await

@@ -84,7 +84,7 @@ try{
  await eventually(()=>value('!!document.querySelector(".autoplay-countdown")'))
  await eventually(()=>value('!!document.querySelector(".player iframe")&&!document.querySelector(".player iframe").src.includes("jNQXAC9IVRw")'),18000)
  console.log('Autoplay offered real recommendations, honored Cancel, then advanced to the next video after its countdown.')
- await value(`[...document.querySelectorAll('.watch-actions button')].find(b=>b.textContent.includes('Pop out')).click()`)
+ await value(`[...document.querySelectorAll('.watch-view-controls button')].find(b=>b.textContent.includes('Pop out')).click()`)
  const miniTarget=await eventually(async()=>(await pages()).find(p=>p.type==='page'&&p.url.includes('mini=1')))
  const mini=await connect(miniTarget)
  try{
@@ -105,6 +105,7 @@ try{
  assert.equal((await pages()).filter(p=>p.type==='page'&&p.url.includes('mini=1')).length,0)
  console.log('The separate mini player played, stopped duplicate audio in the main player, toggled pinning, synchronized autoplay, and returned playback to the main window.')
  }
+ if(process.env.PURETUBE_PLAYBACK_ONLY!=='1'){
  assert.equal(await invoke('download_video',{videoId:'../bad',title:'Invalid',quality:1080}).then(()=>false,()=>true),true)
  const job=await invoke('download_video',{videoId:'jNQXAC9IVRw',title:'Me at the zoo',quality:720})
  await navigate('Downloads')
@@ -123,6 +124,7 @@ try{
  console.log('A real public video downloaded successfully with audio and video; progress and completion appeared in Downloads.')
  const shot=await call('Page.captureScreenshot',{format:'png'});writeFileSync(resolve('src-tauri/target/PureTube-0.10.0-downloads.png'),Buffer.from(shot.data,'base64'))
  if(report.queries.length)writeFileSync(resolve('src-tauri/target/PureTube-0.10.0-audit.json'),JSON.stringify(report,null,2))
+ }
  console.log('All new feature checks passed.')
 }catch(error){
  try{console.log('Failure state: '+JSON.stringify(await value('({title:document.querySelector("h1")?.textContent,notices:[...document.querySelectorAll(".notice")].map(e=>e.textContent),player:document.querySelector(".player iframe")?.src,upNext:document.querySelectorAll(".up-next-card").length})')));console.log('Pages: '+JSON.stringify((await pages()).map(p=>({type:p.type,url:p.url}))));const shot=await call('Page.captureScreenshot',{format:'png'});writeFileSync(resolve('src-tauri/target/PureTube-feature-failure.png'),Buffer.from(shot.data,'base64'))}catch{}

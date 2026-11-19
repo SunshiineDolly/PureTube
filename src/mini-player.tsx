@@ -8,6 +8,7 @@ import {decode,empty,type Library} from './library'
 import type {Video} from './domain'
 import {errorText} from './domain'
 import {useUpNext,UpNext} from './up-next'
+import {applyPalette,readAccent,type Mode} from './palettes'
 type Payload={video:Video;start:number;theme:string;accent:string;autoplay:boolean}
 export function MiniPlayer(){
  const [payload,setPayload]=useState<Payload>(),[data,setData]=useState<Library>(empty),[pinned,setPinned]=useState(true),[error,setError]=useState(''),[ended,setEnded]=useState(false),[played,setPlayed]=useState<string[]>([])
@@ -17,7 +18,7 @@ export function MiniPlayer(){
   const stop=listen<Payload>('player-load',e=>{setPayload(e.payload);setEnded(false)})
   return()=>{void stop.then(f=>f())}
  },[])
- useEffect(()=>{if(payload){document.documentElement.dataset.theme=payload.theme;document.documentElement.dataset.accent=payload.accent}},[payload?.theme,payload?.accent])
+ useEffect(()=>{if(payload)applyPalette(payload.theme as Mode,readAccent(payload.accent))},[payload?.theme,payload?.accent])
  const current=payload?.video
  const queue=useUpNext(current??{id:'',title:'',channelId:'',channel:'',description:'',image:'',date:'',duration:0,embeddable:true,paid:false,shorts:false},data,[],played)
  async function watch(video:Video){

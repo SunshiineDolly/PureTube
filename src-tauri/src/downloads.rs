@@ -1,5 +1,6 @@
 use crate::Result;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -13,6 +14,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_opener::OpenerExt;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -25,13 +27,16 @@ pub struct Job {
     message: String,
     file: Option<String>,
     quality: u32,
+    #[serde(default)]
+    directory: String,
 }
 pub struct Downloads {
     jobs: Mutex<Vec<Job>>,
     children: Mutex<HashMap<String, Arc<Mutex<Child>>>>,
     cancelled: Mutex<HashSet<String>>,
     tools: Mutex<()>,
-    root: PathBuf,
+    destination: Mutex<PathBuf>,
+    quality: Mutex<u32>,
     record: PathBuf,
 }
 impl Downloads {
@@ -42,18 +47,35 @@ impl Downloads {
             .unwrap_or_default();
         jobs.truncate(200);
         for job in &mut jobs {
+            if job.directory.is_empty() {
+                job.directory = root.to_string_lossy().into_owned();
+            }
             if matches!(job.status.as_str(), "preparing" | "downloading" | "merging") {
                 job.status = "interrupted".into();
                 job.message =
                     "PureTube closed before this download finished. Try again to resume.".into();
             }
         }
+        let preferences: Value = fs::read(record.with_file_name("download-preferences.json"))
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or(Value::Null);
+        let destination = preferences["directory"]
+            .as_str()
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .unwrap_or_else(|| root.clone());
+        let quality = preferences["quality"]
+            .as_u64()
+            .filter(|q| [0, 720, 1080].contains(q))
+            .unwrap_or(1080) as u32;
         Self {
             jobs: Mutex::new(jobs),
             children: Mutex::new(HashMap::new()),
             cancelled: Mutex::new(HashSet::new()),
             tools: Mutex::new(()),
-            root,
+            destination: Mutex::new(destination),
+            quality: Mutex::new(quality),
             record,
         }
     }
@@ -275,7 +297,9 @@ fn worker(app: tauri::AppHandle, id: String) -> Result<()> {
     if state.stopped(&id) {
         return Err("Cancelled".into());
     }
-    fs::create_dir_all(&state.root).map_err(|_| "Could not create Downloads/PureTube.")?;
+    let destination = PathBuf::from(&job.directory);
+    fs::create_dir_all(&destination)
+        .map_err(|_| "Could not create the selected downloads folder.")?;
     let height = if job.quality == 0 {
         String::new()
     } else {
@@ -312,7 +336,7 @@ fn worker(app: tauri::AppHandle, id: String) -> Result<()> {
             .to_str()
             .ok_or("Invalid helper folder.")?,
         "-P",
-        state.root.to_str().ok_or("Invalid downloads folder.")?,
+        destination.to_str().ok_or("Invalid downloads folder.")?,
         "-o",
         "%(title).120B [%(id)s].%(ext)s",
         "--",
@@ -353,7 +377,7 @@ fn worker(app: tauri::AppHandle, id: String) -> Result<()> {
             state.update(&app, &id, "downloading", p, "Downloading…", None);
         } else if let Some(file) = line.strip_prefix("PT_FILE:") {
             let path = PathBuf::from(file.trim());
-            if let (Ok(path), Ok(root)) = (path.canonicalize(), state.root.canonicalize()) {
+            if let (Ok(path), Ok(root)) = (path.canonicalize(), destination.canonicalize()) {
                 if path.starts_with(root) && path.is_file() {
                     output = Some(path.to_string_lossy().into_owned());
                 }
@@ -389,14 +413,7 @@ fn worker(app: tauri::AppHandle, id: String) -> Result<()> {
     if !status.success() || output.is_none() {
         return Err(if error.contains("Sign in")||error.contains("sign in"){ "YouTube requires sign-in for this download. PureTube downloads public, unrestricted videos without account cookies." }else if error.contains("unavailable")||error.contains("not available"){ "This video is not available for download." }else{"The video could not be downloaded. Check your connection and disk space, then try again."}.into());
     }
-    state.update(
-        &app,
-        &id,
-        "complete",
-        100.,
-        "Saved to Downloads/PureTube",
-        output,
-    );
+    state.update(&app, &id, "complete", 100., "Download complete", output);
     Ok(())
 }
 #[tauri::command]
@@ -409,8 +426,9 @@ pub fn download_video(
     state: State<Downloads>,
     video_id: String,
     title: String,
-    quality: u32,
+    quality: Option<u32>,
 ) -> Result<String> {
+    let quality = quality.unwrap_or(*state.quality.lock().unwrap());
     if video_id.len() != 11
         || !video_id
             .bytes()
@@ -453,6 +471,12 @@ pub fn download_video(
             message: "Preparing download…".into(),
             file: None,
             quality,
+            directory: state
+                .destination
+                .lock()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
         },
     );
     jobs.truncate(200);
@@ -487,8 +511,144 @@ pub fn download_cancel(state: State<Downloads>, id: String) {
 }
 #[tauri::command]
 pub fn open_downloads(app: tauri::AppHandle, state: State<Downloads>) -> Result<()> {
-    fs::create_dir_all(&state.root).map_err(|_| "Could not open Downloads/PureTube.")?;
+    let root = state.destination.lock().unwrap().clone();
+    fs::create_dir_all(&root).map_err(|_| "Could not open the downloads folder.")?;
     app.opener()
-        .open_path(state.root.to_string_lossy(), None::<&str>)
+        .open_path(display_path(&root), None::<&str>)
         .map_err(|_| "Could not open the downloads folder.".into())
+}
+fn display_path(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{}", rest)
+    } else {
+        value.strip_prefix(r"\\?\").unwrap_or(&value).to_owned()
+    }
+}
+fn preferences(state: &Downloads) -> Value {
+    json!({"directory":display_path(&state.destination.lock().unwrap()),"quality":*state.quality.lock().unwrap()})
+}
+fn save_preferences(state: &Downloads) -> Result<Value> {
+    let value = preferences(state);
+    fs::write(
+        state.record.with_file_name("download-preferences.json"),
+        value.to_string(),
+    )
+    .map_err(|_| "Could not save download preferences.")?;
+    Ok(value)
+}
+#[tauri::command]
+pub fn download_preferences(state: State<Downloads>) -> Value {
+    preferences(&state)
+}
+#[tauri::command]
+pub fn download_set_directory(state: State<Downloads>, directory: String) -> Result<Value> {
+    let path = PathBuf::from(directory.trim());
+    if !path.is_absolute() {
+        return Err("Choose an absolute folder path.".into());
+    }
+    fs::create_dir_all(&path).map_err(|_| "Could not create or access this folder.")?;
+    *state.destination.lock().unwrap() = path
+        .canonicalize()
+        .map_err(|_| "Could not open this folder.")?;
+    save_preferences(&state)
+}
+#[tauri::command]
+pub async fn download_choose_directory(
+    app: tauri::AppHandle,
+    state: State<'_, Downloads>,
+) -> Result<Value> {
+    if let Some(FilePath::Path(path)) = app.dialog().file().blocking_pick_folder() {
+        *state.destination.lock().unwrap() = path;
+        return save_preferences(&state);
+    }
+    Ok(preferences(&state))
+}
+#[tauri::command]
+pub fn download_set_quality(state: State<Downloads>, quality: u32) -> Result<Value> {
+    if ![0, 720, 1080].contains(&quality) {
+        return Err("Invalid download quality.".into());
+    }
+    *state.quality.lock().unwrap() = quality;
+    save_preferences(&state)
+}
+#[tauri::command]
+pub fn download_remove(
+    app: tauri::AppHandle,
+    state: State<Downloads>,
+    id: String,
+    delete_files: bool,
+) -> Result<()> {
+    let mut jobs = state.jobs.lock().unwrap();
+    let job = jobs
+        .iter()
+        .find(|j| j.id == id)
+        .cloned()
+        .ok_or("Download not found.")?;
+    if matches!(job.status.as_str(), "preparing" | "downloading" | "merging") {
+        return Err("Cancel this download before removing it.".into());
+    }
+    if delete_files {
+        let root = PathBuf::from(&job.directory)
+            .canonicalize()
+            .map_err(|_| "The download folder is unavailable.")?;
+        if let Some(file) = &job.file {
+            let path = PathBuf::from(file);
+            if path.exists() {
+                let canonical = path
+                    .canonicalize()
+                    .map_err(|_| "Could not find this download.")?;
+                let filename = canonical
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_default();
+                let ext = canonical
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_default();
+                if !canonical.starts_with(&root)
+                    || !filename.contains(&format!("[{}]", job.video_id))
+                    || !["mp4", "webm", "mkv", "m4a"].contains(&ext)
+                {
+                    return Err("This file is outside the recorded download destination.".into());
+                }
+                fs::remove_file(canonical)
+                    .map_err(|_| "Close this video in other programs before deleting it.")?;
+            }
+        } else {
+            for entry in fs::read_dir(root)
+                .map_err(|_| "Could not inspect partial downloads.")?
+                .flatten()
+            {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if path.is_file()
+                    && name.contains(&format!("[{}]", job.video_id))
+                    && (name.ends_with(".part") || name.ends_with(".ytdl"))
+                {
+                    fs::remove_file(path).map_err(|_| "Could not delete a partial download.")?;
+                }
+            }
+        }
+    }
+    jobs.retain(|j| j.id != id);
+    fs::write(
+        &state.record,
+        serde_json::to_vec(&*jobs).unwrap_or_default(),
+    )
+    .map_err(|_| "Could not update the downloads list.")?;
+    let _ = app.emit_to("main", "downloads-changed", &*jobs);
+    Ok(())
+}
+#[tauri::command]
+pub fn download_clear_finished(app: tauri::AppHandle, state: State<Downloads>) -> Result<()> {
+    let mut jobs = state.jobs.lock().unwrap();
+    jobs.retain(|j| matches!(j.status.as_str(), "preparing" | "downloading" | "merging"));
+    fs::write(
+        &state.record,
+        serde_json::to_vec(&*jobs).unwrap_or_default(),
+    )
+    .map_err(|_| "Could not clear the downloads list.")?;
+    let _ = app.emit_to("main", "downloads-changed", &*jobs);
+    Ok(())
 }

@@ -5,7 +5,7 @@ import {errorText} from './domain'
 import {parseChannel} from './public-feeds'
 import {decode,empty,type Library,type Settings} from './library'
 import type {AppUpdates} from './updates'
-import {accents,palettes} from './palettes'
+import {accents,palettes,paletteStyle} from './palettes'
 import {resetRecommendationMemory} from './use-recommendations'
 type SetSetting=<K extends keyof Settings>(key:K,value:Settings[K])=>void
 function Toggle({label,value,onChange}:{label:string;value:boolean;onChange:(v:boolean)=>void}) {return <label className="toggle"><span>{label}</span><input type="checkbox" checked={value} onChange={e=>onChange(e.target.checked)}/></label>}
@@ -21,7 +21,7 @@ export function Preferences({data,setting,change,updates}:{data:Library;setting:
  return <div className="settings">
  {message&&<p className="notice sticky" role="status">{message}</p>}
  <section><h2><Palette/> Appearance</h2><label>Theme <select value={s.theme} onChange={e=>setting('theme',e.target.value as Settings['theme'])}><option value="dark">Dark</option><option value="light">Light</option></select></label>
- <div className="palette-options" role="group" aria-label="Color palette">{accents.map(accent=><button key={accent} type="button" className="palette-option" data-theme={s.theme} data-accent={accent} aria-pressed={s.accent===accent} onClick={()=>setting('accent',accent)}><span className="palette-preview" aria-hidden="true"><i/><i/><i/></span>{palettes[s.theme][accent]}</button>)}</div>
+ <div className="palette-options" role="group" aria-label="Color palette">{accents.map(accent=><button key={accent} type="button" className="palette-option" data-theme={s.theme} data-accent={accent} style={paletteStyle(s.theme,accent)} aria-pressed={s.accent===accent} onClick={()=>setting('accent',accent)}><span className="palette-preview" aria-hidden="true"><i/><i/><i/></span>{palettes[s.theme][accent]}</button>)}</div>
  <label>Thumbnail density <select value={s.density} onChange={e=>setting('density',e.target.value as Settings['density'])}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>{toggle('collapsed','Collapse sidebar')}</section>
  <section><h2><SlidersHorizontal/> Content filters</h2>
  <p>Blocked phrases match titles and descriptions, ignoring case.</p>
@@ -37,7 +37,7 @@ export function Preferences({data,setting,change,updates}:{data:Library;setting:
  <div className="row wrap">{([['terms','YouTube Terms of Service'],['privacy','Google Privacy Policy']] as const).map(([page,label])=><button className="button" key={page} onClick={()=>void action(()=>invoke('open_info',{page}))}>{label}</button>)}</div>
  <div className="row wrap"><button className="button" disabled={busy} onClick={()=>void action(async()=>{if(await invoke('export_library',{data}))setMessage('Library backup saved.')})}><Download size={16}/> Export backup</button>
  <button className="button" disabled={busy} onClick={()=>void action(async()=>{const imported=await invoke<unknown>('import_library');if(!imported)return;const decoded=decode(imported);if(!confirm('Replace your current PureTube library and preferences with this backup?'))return;change(()=>decoded);setMessage('Library imported.')})}><Upload size={16}/> Import backup</button>
- <button className="button" onClick={()=>{if(confirm('Clear all watch history and category preferences?')){resetRecommendationMemory();change(d=>({...d,history:{},interests:{}}))}}}><Trash2 size={16}/> Clear history</button>
+ <button className="button" onClick={()=>{if(confirm('Clear all watch history and category preferences?')){resetRecommendationMemory();change(d=>({...d,history:{},interests:{},savedVideos:Object.fromEntries(Object.entries(d.savedVideos).filter(([id])=>d.later.includes(id)||d.favorites.includes(id)||d.collections.some(c=>c.ids.includes(id))))}))}}}><Trash2 size={16}/> Clear history</button>
  <button className="button" onClick={()=>{resetRecommendationMemory();change(d=>({...d,interests:{},dismissed:[]}));setMessage('Recommendation preferences reset.')}}>Reset recommendations</button>
  <button className="button" onClick={()=>{if(confirm('Clear all saved playback positions?'))change(d=>({...d,progress:{}}))}}>Clear progress</button>
  <button className="button danger" onClick={()=>{if(confirm('Reset the local library and all preferences?')){resetRecommendationMemory();change(()=>empty())}}}>Reset local data</button></div></section>

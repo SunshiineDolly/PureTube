@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod comments;
 mod desktop;
 mod downloads;
+mod original_player;
 mod popout;
 mod updates;
 mod youtube_search;
@@ -212,7 +214,16 @@ fn main() {
         downloads::download_list,
         downloads::download_video,
         downloads::download_cancel,
-        downloads::open_downloads
+        downloads::open_downloads,
+        comments::video_comments,
+        original_player::original_player,
+        original_player::close_original_player,
+        downloads::download_preferences,
+        downloads::download_set_directory,
+        downloads::download_choose_directory,
+        downloads::download_set_quality,
+        downloads::download_remove,
+        downloads::download_clear_finished
     ];
     let builder = tauri::Builder::default();
     #[cfg(windows)]

@@ -29,3 +29,15 @@ test('older channel cards recover the known creator name without overwriting col
  assert.equal(result.creators?.[0].name,'Followed creator')
  assert.equal(result.creators?.[1].name,'Guest creator')
 })
+
+test('recommendations deduplicate titles and interleave creators',()=>{
+ const data=empty();data.follows=['followed']
+ const a=video('a0000000000','followed'),b=video('b0000000000','followed'),duplicate={...a,id:'c0000000000',title:'A0000000000 🔴'},other=video('d0000000000','other')
+ assert.deepEqual(nextVideos(video('current0000'),[a,b,duplicate,other],data).map(v=>v.id),[a.id,other.id,b.id])
+})
+
+test('explicit profile topics shape autoplay with history disabled',()=>{
+ const data=empty();data.settings.history=false;data.preferredTopics=['Food']
+ const a=video('a0000000000','a','Travel'),b=video('b0000000000','b','Food')
+ assert.equal(nextVideos(video('current0000','c','Music'),[a,b],data)[0].id,b.id)
+})

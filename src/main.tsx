@@ -1,3 +1,5 @@
+import {Watch} from './watch'
+import {applyPalette} from './palettes'
 import {createRoot} from 'react-dom/client'
 import {useEffect,useLayoutEffect,useRef,useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
@@ -14,7 +16,7 @@ import {PlayerFrame} from './player'
 import {useLibrary} from './hooks'
 import {channelId,errorText,visible,type Video} from './domain'
 import {linkVideo,parseVideo,usePublicFeeds} from './public-feeds'
-import {toggled} from './library'
+import {rememberVideo,toggled} from './library'
 import {Discover,RecommendationFeed} from './discover'
 import {useUpdates} from './updates'
 import {categoryFor} from './topics'
@@ -50,7 +52,8 @@ function App() {
  const followIds=data.follows
  const feeds=usePublicFeeds(ready?followIds.filter(id=>!s.blocked.includes(id)):[])
  const followedLive=useFollowedLive(ready?followIds.filter(id=>!s.blocked.includes(id)):[])
- useEffect(()=>{document.documentElement.dataset.theme=s.theme;document.documentElement.dataset.accent=s.accent},[s.theme,s.accent])
+ useEffect(()=>applyPalette(s.theme,s.accent),[s.theme,s.accent])
+ useEffect(()=>setText(''),[route])
  useEffect(()=>{
    const key=(e:KeyboardEvent)=>{
      if(e.key==='Escape'&&focus){setFocus(false);return}
@@ -64,6 +67,8 @@ function App() {
  },[route])
  function go(next:Route) {
    if(next.name===route.name&&next.name!=='search'&&next.name!=='watch'&&next.name!=='channel')return
+   if(next.name==='watch')void invoke('close_original_player').catch(()=>{})
+   setText('')
    routes.current.push({route,text:route.name==='search'?route.query:text,scroll:main.current?.scrollTop??0})
    restoreScroll.current=0
    setRoute(next);setNotice('');setFocus(next.name==='watch'&&s.focus);setTheater(false)
@@ -71,7 +76,7 @@ function App() {
  function back() {
    const entry=routes.current.pop()
    restoreScroll.current=entry?.scroll??0
-   setRoute(entry?.route??{name:'home'});setText(entry?.text??'');setFocus(false);setTheater(false);setNotice('')
+   setRoute(entry?.route??{name:'home'});setText('');setFocus(false);setTheater(false);setNotice('')
  }
  function submit(value:string) {
    const term=value.trim()
@@ -88,18 +93,18 @@ function App() {
    if(!visible(v,s))setNotice('This video is hidden by your filters.')
    else go({name:'watch',video:v})
  }
- const shared:Shared={data,change,feeds,followIds,live:followedLive,watch:v=>{if(floating)void invoke('close_player');go({name:'watch',video:v})},channel:id=>go({name:'channel',id}),follow:id=>{if(channelId(id))change(d=>({...d,follows:toggled(d.follows,id)}))},subscriptions:()=>go({name:'subscriptions'}),discover:()=>go({name:'discover'})}
+ const shared:Shared={data,change,feeds,followIds,live:followedLive,watch:v=>{if(data.settings.history)change(d=>rememberVideo(d,v));if(floating)void invoke('close_player');go({name:'watch',video:v})},channel:id=>go({name:'channel',id}),follow:id=>{if(channelId(id))change(d=>({...d,follows:toggled(d.follows,id)}))},subscriptions:()=>go({name:'subscriptions'}),discover:()=>go({name:'discover'})}
  const noteSample=(id:string,position:number,duration:number,elapsed:number,live=false)=>{
    if(!Number.isFinite(elapsed)||elapsed<0)return
    const settings=dataRef.current.settings
    const saveProgress=settings.progress&&!live&&Number.isFinite(position)&&Number.isFinite(duration)&&duration>0
-   if(!saveProgress && !settings.reminder)return
+   if(!saveProgress && !settings.reminder && !settings.history)return
    const today=localDate()
    const old=dataRef.current.daily.date===today?dataRef.current.daily.seconds:0
    if(settings.reminder && old<settings.reminder*60 && old+elapsed>=settings.reminder*60)setReminder('You’ve reached your daily viewing reminder. Take a break whenever you’re ready.')
    change(d=>{
      const nextProgress=saveProgress?{...d.progress,[id]:{at:Math.min(duration,Math.max(0,position)),duration,updated:Date.now()}}:d.progress
-     return {...d,progress:nextProgress,daily:settings.reminder?{date:today,seconds:(d.daily.date===today?d.daily.seconds:0)+elapsed}:d.daily}
+     return {...d,progress:nextProgress,daily:settings.reminder||settings.history?{date:today,seconds:(d.daily.date===today?d.daily.seconds:0)+elapsed}:d.daily}
    })
  }
  useEffect(()=>{
@@ -123,7 +128,7 @@ function App() {
  <div className="header-actions">{!focus&&<>
  <button className="icon theme" aria-label={'Switch to '+(s.theme==='dark'?'light':'dark')+' theme'} disabled={!ready} onClick={()=>setting('theme',s.theme==='dark'?'light':'dark')}>{s.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button>
  {updates.release&&<button className="button accent" onClick={()=>go({name:'settings'})}>Update available</button>}
- <button className="profile-chip" aria-label="Open local profile" onClick={()=>go({name:'profile'})}>{data.profileName?Array.from(data.profileName)[0].toUpperCase():<UserRound size={19}/>}</button></>}
+ <button className="profile-chip" aria-label="Open local profile" onClick={()=>go({name:'profile'})}>{data.profileEmoji||(data.profileName?Array.from(data.profileName)[0].toUpperCase():<UserRound size={19}/>)}</button></>}
  <WindowControls/></div>
  </header>
  {!focus&&<aside className="sidebar"><nav aria-label="Main navigation">{nav.filter(item=>["home","discover","following","live"].includes(item.id)).map(({id,name,Icon})=><button title={name} className={navActive===id?'selected':''} aria-current={navActive===id?'page':undefined} aria-label={name} key={id} onClick={()=>go({name:id})}><Icon size={19}/><span>{name}</span>{id==='live'&&liveChannels.length>0&&<span className="nav-live-count">{liveChannels.length}</span>}</button>)}</nav>
@@ -143,7 +148,7 @@ function App() {
  route.name==='following'?<Quiet shared={shared}/>:
  route.name==='live'?<SearchPage key="live" shared={shared} query="lofi radio" liveOnly liveQuery={route.query} mode={route.mode} onLiveQuery={query=>setRoute({...route,query})} onMode={mode=>setRoute({...route,mode})}/>:
  route.name==='search'?<SearchPage key={route.query} shared={shared} query={route.query} selectedSource={route.source} onSourceChange={source=>setRoute({...route,source})}/>:
- route.name==='profile'?<Profile shared={shared} following={()=>go({name:'following'})} later={()=>go({name:'later'})} library={()=>go({name:'library'})}/>:
+ route.name==='profile'?<Profile shared={shared}/>:
  route.name==='downloads'?<DownloadsPage/>:
  route.name==='settings'?<><Heading label="PREFERENCES" title="Settings" detail="Make PureTube work the way you want."/><Preferences data={data} setting={setting} change={change} updates={updates}/></>:
  route.name==='subscriptions'?<Subscriptions shared={shared}/>:
@@ -153,55 +158,4 @@ function App() {
  </main></div>
 }
 
-function Watch({video:v,shared,focus,theater,setFocus,setTheater,onSample,onElapsed,popped,returned,onPopout}:{video:Video;shared:Shared;focus:boolean;theater:boolean;setFocus:(v:boolean)=>void;setTheater:(v:boolean)=>void;onSample:(id:string,p:number,d:number,t:number,live?:boolean)=>void;onElapsed:(seconds:number)=>void;popped:boolean;returned?:number;onPopout:(video:Video,start:number)=>Promise<void>}) {
- const {data,change,follow,channel}=shared
- const [collection,setCollection]=useState('')
- const [share,setShare]=useState(false)
- const [shareStatus,setShareStatus]=useState('')
- const [ended,setEnded]=useState(false),[popoutError,setPopoutError]=useState('')
- const playerPosition=useRef<()=>number>(()=>0)
- const status=useScheduledStatus(v.id,v.scheduledAt)
- const checked=useWatchCreator(v.id,true)
- const uploader=checked.creator
- const creatorVideo=uploader?{...v,channelId:uploader.id,channel:uploader.name,date:v.date||uploader.date,title:v.title==='YouTube video'?uploader.title||v.title:v.title}:v
- const live=uploader?uploader.live:!!v.live||status==='live'
- const next=useUpNext(creatorVideo,data,Object.values(shared.feeds.states).flatMap(s=>s.feed?.videos??[]).filter(v=>!Object.values(shared.live.states).some(s=>!s.error&&s.video?.id===v.id)))
- const waiting=!!v.scheduledAt&&status==='waiting'&&!v.live
- const shareUrl='https://www.youtube.com/watch?v='+v.id
- async function copyLink(){
-   try{await navigator.clipboard.writeText(shareUrl);setShare(false);setShareStatus('Link copied.')}
-   catch{setShareStatus('Couldn’t copy automatically. Select the link and copy it.')}
- }
- if(!visible(creatorVideo,data.settings))return <Empty title="Video hidden" detail="This video matches one of your content filters."/>
- const later=data.later.includes(v.id),fav=data.favorites.includes(v.id)
- const progress=data.settings.progress?data.progress[v.id]:undefined
- const start=returned??(progress&&progress.at<progress.duration-5?progress.at:0)
- return <div className={'watch '+(live&&!focus?'with-live-chat ':'')+(theater?'theater':'')}>
- <div className="watch-media-layout"><div className="watch-media">
- {popped?<div className="popped-placeholder"><PictureInPicture2 size={36}/><p>Playing in your mini player</p><button className="button" onClick={()=>void invoke('close_player')}>Bring back here</button></div>:waiting?<div className="scheduled-watch">{v.image&&<img src={v.image} alt=""/>}<ScheduledDetails video={v} data={data} change={change}/></div>:
- (uploader?.embeddable??v.embeddable)?<PlayerFrame id={v.id} live={live} start={live||checked.loading?0:start} onController={getter=>{playerPosition.current=getter}} onEnded={()=>setEnded(true)} onElapsed={onElapsed} onSample={(p,d,t)=>onSample(v.id,p,d,t,live)} onPlay={()=>{if(data.settings.history)change(d=>{const topic=categoryFor(v);return {...d,history:{...d.history,[v.id]:Date.now()},interests:topic?{...d.interests,[topic]:(d.interests[topic]??0)+1}:d.interests}})}}/>:<Notice text="YouTube does not allow this video to be embedded."/>}
- </div>{live&&!focus&&<LiveChat key={v.id} id={v.id}/>}</div>
- {!focus&&<><div className="row wrap watch-actions">
- <button className="button" onClick={()=>setFocus(true)}><Maximize size={16}/> Focus Player</button>
- <button className="button" aria-pressed={theater} onClick={()=>setTheater(!theater)}>{theater?'Exit theater':'Theater mode'}</button>
- <button className="button" aria-expanded={share} onClick={()=>{setShare(!share);setShareStatus('')}}><Share2 size={16}/> Share</button>
- <button className="button" disabled={popped||waiting} onClick={()=>void onPopout({...creatorVideo,live},live?0:playerPosition.current()).catch(e=>setPopoutError(errorText(e)))}><PictureInPicture2 size={16}/> Pop out</button>
- <DownloadButton video={creatorVideo} disabled={live||waiting}/>
- </div>
- {popoutError&&<Notice text={popoutError}/>}
- {share&&<div className="row wrap share-panel" onKeyDown={e=>{if(e.key==='Escape')setShare(false)}}><label>Video link <input readOnly value={shareUrl} onFocus={e=>e.currentTarget.select()}/></label><button className="button accent" onClick={()=>void copyLink()}>Copy link</button><button className="icon" aria-label="Close share" onClick={()=>setShare(false)}><X size={16}/></button></div>}
- {shareStatus&&<p className="meta" role="status">{shareStatus}</p>}
- <h1>{creatorVideo.title}</h1>
- <div className="row wrap channel-meta">{creatorVideo.channelId&&<CreatorAvatar id={creatorVideo.channelId} name={creatorVideo.channel} src={creatorVideo.creators?.[0]?.image||creatorVideo.channelImage}/>}
- <CreatorByline video={creatorVideo} onChannel={channel}/>
- {creatorVideo.channelId&&<button className="button" onClick={()=>follow(creatorVideo.channelId)}>{data.follows.includes(creatorVideo.channelId)?'Unfollow':'Follow'}</button>}
- <button className="button" aria-pressed={later} onClick={()=>change(d=>({...d,later:toggled(d.later,v.id)}))}><Clock3 size={16}/> {later?'Saved for later':'Watch Later'}</button>
- <button className="button" aria-pressed={fav} onClick={()=>change(d=>({...d,favorites:toggled(d.favorites,v.id)}))}><Heart size={16}/> {fav?'Favorited':'Favorite'}</button></div>
- {(creatorVideo.date||v.publishedLabel)&&<p className="meta">{day(creatorVideo.date)||v.publishedLabel}</p>}
- {data.collections.length>0&&<form className="row watch-actions" onSubmit={e=>{e.preventDefault();if(collection==='')return;change(d=>({...d,collections:d.collections.map((c,i)=>i===Number(collection)?{...c,ids:[...new Set([v.id,...c.ids])]}:c)}));setCollection('')}}><select aria-label="Collection" value={collection} onChange={e=>setCollection(e.target.value)}><option value="">Select a collection</option>{data.collections.map((c,i)=><option value={i} key={i}>{c.name}{c.ids.includes(v.id)?' (saved)':''}</option>)}</select><button disabled={collection===''} className="button">Add to collection</button></form>}
- {v.description&&<details><summary>Video description</summary><p className="description">{v.description}</p></details>}
- <p className="meta">Played by YouTube. The embedded player may show ads or related videos.</p></>}
- {!live&&!waiting&&!popped&&<UpNext videos={next} autoplay={data.settings.autoplay} ended={ended} onToggle={()=>change(d=>({...d,settings:{...d.settings,autoplay:!d.settings.autoplay}}))} onWatch={shared.watch}/>}
- </div>
-}
 createRoot(document.getElementById('root')!).render(new URLSearchParams(location.search).has('mini')?<MiniPlayer/>:<App/>)

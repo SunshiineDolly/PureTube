@@ -1,27 +1,19 @@
 import {useState} from 'react'
-import {Bookmark,Clock3,UserRound,Users} from 'lucide-react'
-import {Heading,Notice,type Shared} from './screens'
-import {profileName} from './library'
-
-export function Profile({shared,following,library,later}:{shared:Shared;following:()=>void;library:()=>void;later:()=>void}){
+import {Sparkles,Users,Clock3,Heart} from 'lucide-react'
+import {Heading,type Shared} from './screens'
+import {profileName,profileEmojis,toggled} from './library'
+import {topics} from './topics'
+import {resetRecommendationMemory} from './use-recommendations'
+export function Profile({shared}:{shared:Shared}){
  const {data,change}=shared
- const [name,setName]=useState(data.profileName),[saved,setSaved]=useState(false)
- return <>
-  <Heading label="ON THIS PC" title="Your profile" detail="Make PureTube yours. Your profile doesn't need an online account."/>
-  <section className="local-profile">
-   <div className="local-profile-identity"><span className="local-avatar">{data.profileName?Array.from(data.profileName)[0]?.toUpperCase():<UserRound size={25}/>}</span>
-   <div><h2>{data.profileName||'Personal profile'}</h2><p className="meta">Follows, watch history, and saved videos stay in this library.</p></div></div>
-   <form className="row wrap profile-name-form" onSubmit={e=>{e.preventDefault();const value=profileName(name);change(d=>({...d,profileName:value}));setName(value);setSaved(true)}}>
-    <label>Display name <input maxLength={48} value={name} onChange={e=>{setSaved(false);setName(e.target.value)}} placeholder="Optional name"/></label>
-    <button className="button accent" disabled={profileName(name)===data.profileName}>Save name</button>
-   </form>
-   {saved&&<Notice text="Profile saved on this PC."/>}
-  </section>
-  <div className="profile-shortcuts">
-   <button className="button" onClick={following}><Users size={18}/> Following <span>{data.follows.length}</span></button>
-   <button className="button" onClick={later}><Clock3 size={18}/> Watch Later <span>{data.later.length}</span></button>
-   <button className="button" onClick={library}><Bookmark size={18}/> Library</button>
-  </div>
-  <button className="button" onClick={shared.subscriptions}>Add or manage channels</button>
- </>
+ const [name,setName]=useState(data.profileName),[bio,setBio]=useState(data.profileBio),[emoji,setEmoji]=useState(data.profileEmoji),[message,setMessage]=useState('')
+ const week=Object.values(data.history).filter(at=>Date.now()-at<7*86400000).length
+ const today=data.daily.date===new Date().toLocaleDateString('en-CA')?data.daily.seconds:0
+ return <div className="personal-profile"><Heading label="YOUR SPACE" title="Your profile" detail="A little more you, a better mix of videos."/>
+ <section className="profile-identity-card"><div className="profile-cover"/><div className="profile-identity-content"><span className="profile-avatar-large">{emoji||Array.from(name||'♡')[0].toUpperCase()}</span><form className="profile-name-form" onSubmit={e=>{e.preventDefault();change(d=>({...d,profileName:profileName(name),profileBio:bio.trim().slice(0,280),profileEmoji:emoji}));setMessage('Your personal profile is saved on this device.')}}><div className="profile-fields"><label>Display name<input maxLength={48} value={name} placeholder="Your name" onChange={e=>setName(e.target.value)}/></label><label>A little about you<textarea maxLength={280} rows={2} placeholder="What do you love watching?" value={bio} onChange={e=>setBio(e.target.value)}/></label></div><div className="profile-emoji-options" aria-label="Profile avatar">{profileEmojis.map(icon=><button key={icon} type="button" aria-label={icon?'Use '+icon+' avatar':'Use monogram avatar'} aria-pressed={emoji===icon} onClick={()=>setEmoji(icon)}>{icon||'Aa'}</button>)}</div><button className="button accent" type="submit">Save profile</button></form></div></section>
+ {message&&<p role="status" className="profile-message">{message}</p>}
+ <div className="profile-insights"><div><Users size={18}/><strong>{data.follows.length}</strong><span>Creators you follow</span></div><div><Heart size={18}/><strong>{data.settings.history?week:'—'}</strong><span>Videos watched this week</span></div><div><Clock3 size={18}/><strong>{data.settings.history||data.settings.reminder?Math.round(today/60)+' min':'—'}</strong><span>Watching today</span></div></div>
+ <section className="profile-topics"><h2><Sparkles size={19}/> Shape your recommendations</h2><p>Choose the topics you love. These choices guide Home and autoplay, alongside the creators you follow.</p><div className="profile-topic-list">{topics.map(t=><button key={t.name} className="category-chip" aria-pressed={data.preferredTopics.includes(t.name)} disabled={!data.preferredTopics.includes(t.name)&&data.preferredTopics.length>=10} onClick={()=>{resetRecommendationMemory();change(d=>({...d,preferredTopics:toggled(d.preferredTopics,t.name)}));setMessage('Your next Home mix will use your selected topics.')}}>{t.name}</button>)}</div><p className="meta">{data.preferredTopics.length?data.preferredTopics.length+' topics chosen':'Choose a few favorites, or leave this open to explore everything.'}</p></section>
+ <section className="profile-rhythm"><h2>Your viewing rhythm</h2><label>Daily break reminder <select aria-label="Daily break reminder" value={data.settings.reminder} onChange={e=>change(d=>({...d,settings:{...d.settings,reminder:Number(e.target.value)}}))}><option value={0}>No reminder</option>{[15,30,45,60,90,120].map(minutes=><option key={minutes} value={minutes}>{minutes} minutes</option>)}{data.settings.reminder>0&&![15,30,45,60,90,120].includes(data.settings.reminder)&&<option value={data.settings.reminder}>{data.settings.reminder} minutes</option>}</select></label>{data.settings.reminder>0&&<progress aria-label="Daily viewing reminder progress" max={data.settings.reminder*60} value={Math.min(today,data.settings.reminder*60)}/>}<p className="meta">Your profile and viewing preferences stay on this computer.</p></section>
+ </div>
 }

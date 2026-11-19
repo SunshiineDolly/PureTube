@@ -3,7 +3,8 @@ import {Plus, RefreshCw} from 'lucide-react'
 import {AutoMore,Empty,Loading,VideoGrid} from './components'
 import {errorText,fillCreator,publicNewest,unique,uploadAge,videoId,visible,type Video} from './domain'
 import {useFollowingPages} from './following'
-import {toggled,type Library} from './library'
+import {useSavedVideos} from './saved-videos'
+import {rememberVideo,toggled,type Library} from './library'
 import {useResource} from './hooks'
 import {linkVideo,parseChannel,publicFeed,REFRESH_MINUTES,type PublicFeeds} from './public-feeds'
 import {selectUploads} from './feed'
@@ -15,7 +16,7 @@ import {FollowedLiveShelf,useFollowedLive,type FollowedLive} from './followed-li
 export type Shared = {data:Library;change:(fn:(d:Library)=>Library)=>void;watch:(v:Video)=>void;channel:(id:string)=>void;follow:(id:string)=>void;subscriptions:()=>void;discover:()=>void;feeds:PublicFeeds;followIds:string[];live:FollowedLive}
 export function Grid({shared,items,isNew=false,extra}:{shared:Shared;items:Video[];isNew?:boolean;extra?:(v:Video)=>React.ReactNode}) {
  const {data,change,watch,channel}=shared
- return <VideoGrid items={items.filter(v=>visible(v,data.settings))} extra={extra} onWatch={watch} onChannel={channel} progress={data.settings.progress?data.progress:undefined} later={data.later} checked={isNew?data.checked:undefined} onSave={id=>change(d=>({...d,later:toggled(d.later,id)}))}/>
+ return <VideoGrid items={items.filter(v=>visible(v,data.settings))} extra={extra} onWatch={watch} onChannel={channel} progress={data.settings.progress?data.progress:undefined} later={data.later} checked={isNew?data.checked:undefined} onSave={id=>change(d=>{const video=items.find(v=>v.id===id);return {...(video?rememberVideo(d,video):d),later:toggled(d.later,id)}})}/>
 }
 export function Heading({label,title,detail,children}:{label:string;title:string;detail:string;children?:React.ReactNode}) {
  return <div className="heading"><div>{label&&<p className="eyebrow">{label}</p>}<h1>{title}</h1>{detail&&<p>{detail}</p>}</div>{children&&<div className="heading-actions">{children}</div>}</div>
@@ -126,31 +127,34 @@ export function ChannelPage({shared,id,tab='home',setTab}:{shared:Shared;id:stri
 }
 export function LibraryPage({shared,kind}:{shared:Shared;kind:'library'|'later'|'history'}) {
  const {data,change,watch}=shared
- const [tab,setTab]=useState('continue'),[name,setName]=useState(''),[limit,setLimit]=useState(24)
+ const [tab,setTab]=useState('favorites'),[name,setName]=useState(''),[limit,setLimit]=useState(24),[unfinished,setUnfinished]=useState(false)
  const collection=tab.startsWith('collection:')?data.collections[Number(tab.slice(11))]:undefined
- const ids=kind==='later'?data.later:kind==='history'?Object.keys(data.history).sort((a,b)=>data.history[b]-data.history[a]):tab==='favorites'?data.favorites:collection?collection.ids:data.settings.progress?Object.keys(data.progress).filter(id=>data.progress[id].at>0&&data.progress[id].at<data.progress[id].duration-5).sort((a,b)=>data.progress[b].updated-data.progress[a].updated):[]
+ const incomplete=(id:string)=>{const p=data.progress[id];return !!p&&p.at>0&&p.at<p.duration-5&&!data.savedVideos[id]?.live}
+ const ids=kind==='later'?data.later:kind==='history'?(unfinished?[...new Set([...Object.keys(data.history),...Object.keys(data.progress)])].filter(incomplete):Object.keys(data.history)).sort((a,b)=>unfinished?(data.progress[b]?.updated??0)-(data.progress[a]?.updated??0):data.history[b]-data.history[a]):tab==='favorites'?data.favorites:collection?collection.ids:[]
  const page=ids.slice(0,limit)
- const loadedMap=new Map(Object.values(shared.feeds.states).flatMap(state=>state.feed?.videos??[]).map(v=>[v.id,v]))
+ const loadedMap=new Map([...Object.values(data.savedVideos),...Object.values(shared.feeds.states).flatMap(state=>state.feed?.videos??[])].map(v=>[v.id,v]))
+ const loading=useSavedVideos(page,data,change,loadedMap)
  function remove(id:string) {
    change(d=>{
      if(kind==='later')return {...d,later:d.later.filter(i=>i!==id)}
-     if(kind==='history')return {...d,history:Object.fromEntries(Object.entries(d.history).filter(([k])=>k!==id))}
+     if(kind==='history')return {...d,history:Object.fromEntries(Object.entries(d.history).filter(([k])=>k!==id)),progress:Object.fromEntries(Object.entries(d.progress).filter(([k])=>k!==id))}
      if(tab==='favorites')return {...d,favorites:d.favorites.filter(i=>i!==id)}
      if(collection)return {...d,collections:d.collections.map((c,i)=>i===Number(tab.slice(11))?{...c,ids:c.ids.filter(i=>i!==id)}:c)}
      return {...d,progress:Object.fromEntries(Object.entries(d.progress).filter(([k])=>k!==id))}
    })
  }
  return <><Heading label="ON THIS DEVICE" title={kind==='library'?'Library':kind==='later'?'Watch Later':'History'} detail={kind==='history'?'Videos you have played in PureTube.':'Make a little room for the videos you want to keep.'}/>
- {kind==='library'&&<div className="filter-row"><label>Shelf <select value={tab} onChange={e=>{setTab(e.target.value);setLimit(24)}}><option value="continue">Continue watching</option><option value="favorites">Favorites</option>{data.collections.map((c,i)=><option key={i} value={'collection:'+i}>{c.name}</option>)}</select></label>
+ {kind==='history'&&<div className="history-tabs" role="group" aria-label="History view"><button aria-pressed={!unfinished} onClick={()=>{setUnfinished(false);setLimit(24)}}>All watched</button><button aria-pressed={unfinished} onClick={()=>{setUnfinished(true);setLimit(24)}}>Unfinished videos</button></div>}
+ {kind==='library'&&<div className="filter-row"><label>Shelf <select value={tab} onChange={e=>{setTab(e.target.value);setLimit(24)}}><option value="favorites">Favorites</option>{data.collections.map((c,i)=><option key={i} value={'collection:'+i}>{c.name}</option>)}</select></label>
  <form className="row" onSubmit={e=>{e.preventDefault();const title=name.trim();if(title&&!data.collections.some(c=>c.name===title)){const i=data.collections.length;change(d=>({...d,collections:[...d.collections,{name:title,ids:[]}]}));setName('');setTab('collection:'+i)}}}><input aria-label="New collection name" placeholder="New collection" maxLength={80} value={name} onChange={e=>setName(e.target.value)}/><button className="button" disabled={!name.trim()||data.collections.length>=200}><Plus size={16}/> Create</button></form>
- {collection&&<button className="button" onClick={()=>{if(confirm('Delete this collection?')){change(d=>({...d,collections:d.collections.filter((_,i)=>i!==Number(tab.slice(11)))}));setTab('continue')}}}>Delete collection</button>}</div>}
+ {collection&&<button className="button" onClick={()=>{if(confirm('Delete this collection?')){change(d=>({...d,collections:d.collections.filter((_,i)=>i!==Number(tab.slice(11)))}));setTab('favorites')}}}>Delete collection</button>}</div>}
  {!page.length?<Empty title="Nothing saved here yet" detail={kind==='history'?'Videos appear when playback starts and history tracking is enabled.':'Save a video or start watching to fill this shelf.'}/>:
  <><div className="list">{page.map(id=>{
    if(!videoId(id))return null
    const v=loadedMap.get(id)
    const filtered=v&&!visible(v,data.settings)
    if(filtered)return null
-   return <div key={id} className="list-row">{v?.image&&<img className="list-thumb" src={v.image} alt=""/>}<div className="grow">{v?<button className="video-title" onClick={()=>watch(v)}>{v.title}</button>:<button className="video-title" onClick={()=>watch(linkVideo(id))}>Open saved video ({id})</button>}<div className="meta">{v?.channel??'Saved video ID / details unavailable'}</div></div><button className="button" onClick={()=>remove(id)}>Remove</button></div>
+   return <div key={id} className="list-row"><img className="list-thumb" src={v?.image||'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg'} alt="" loading="lazy"/><div className="grow"><button className="video-title" onClick={()=>watch(v??linkVideo(id))}>{v?.title||(loading?'Loading video details…':'Saved video — details unavailable')}</button><div className="meta">{v?.channel||'YouTube video'}{kind==='history'&&data.progress[id]&&!v?.live?' · '+Math.round(100*data.progress[id].at/data.progress[id].duration)+'% watched':''}</div></div><button className="button" onClick={()=>remove(id)}>Remove</button></div>
  })}</div>{page.every(id=>{const v=loadedMap.get(id);return v&&!visible(v,data.settings)})&&<Empty title="Saved entries are hidden by your filters" detail="Change your filters in Settings to see these entries."/>}<AutoMore enabled={ids.length>limit} onReach={()=>setLimit(n=>n+24)}/></>}
  </>
 }

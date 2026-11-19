@@ -15,8 +15,8 @@ function playerApi() {
    document.head.appendChild(script)
  }).catch(e=>{api=undefined;throw e}) as Promise<NonNullable<Window['YT']>>
 }
-export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,sampleInterval=8}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;sampleInterval?:number}) {
- const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController})
+export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,sampleInterval=8}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;sampleInterval?:number}) {
+ const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController,onRestricted})
  const initial=useRef(start)
  const resume=useRef(start),seekWhenReady=useRef(()=>{})
  resume.current=start
@@ -24,7 +24,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
  const [error,setError]=useState('')
  const [liveState,setLiveState]=useState<'connecting'|'playing'|'paused'|'buffering'|'ended'>('connecting')
  const jump=useRef<()=>void>(()=>{})
- callbacks.current={onSample,onPlay,onElapsed,onEnded,onController}
+ callbacks.current={onSample,onPlay,onElapsed,onEnded,onController,onRestricted}
  useEffect(()=>{
    const host=mount.current!
    const frame=document.createElement('iframe')
@@ -88,7 +88,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
          if(e.data===0 || e.data===2) sample(true)
          if(e.data===0&&!live)callbacks.current.onEnded?.()
        },
-       onError:e=>{if(closed)return;count(false);setError(e.data===153?'YouTube couldn’t play this video in PureTube. Try another result.':[101,150].includes(e.data)?'The creator has disabled embedded playback.':e.data===100?'This video is unavailable or private.':'YouTube could not play this video here.')}
+       onError:e=>{if(closed)return;count(false);if([101,150].includes(e.data))callbacks.current.onRestricted?.();setError(e.data===153?'YouTube couldn’t play this video in PureTube. Try another result.':[101,150].includes(e.data)?'The creator has disabled embedded playback.':e.data===100?'This video is unavailable or private.':'YouTube could not play this video here.')}
      }})
    }).catch(e=>{if(!closed) setError(String(e.message??e))})
    const flush=()=>{if(played) sample(true)}

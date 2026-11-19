@@ -6,17 +6,20 @@ import {lookupCreator} from './creator-links'
 let stopCurrent:(()=>void)|undefined
 export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatch:(v:Video)=>void;progress?:{at:number;duration:number};checked?:string}){
  const [preview,setPreview]=useState(false)
+ const [restricted,setRestricted]=useState(false),hovered=useRef(false)
  const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined)
  const stop=useRef(()=>{})
- stop.current=()=>{clearTimeout(timer.current);setPreview(false)}
+ stop.current=()=>{hovered.current=false;clearTimeout(timer.current);setPreview(false)}
  function start(){
    if(v.scheduledAt||!v.embeddable||!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return
+   hovered.current=true
    timer.current=setTimeout(()=>{
-     void lookupCreator(v.id).catch(()=>{})
+     void lookupCreator(v.id).then(creator=>{if(!hovered.current)return;if(!creator.embeddable){setRestricted(true);return}
      stopCurrent?.()
      const close=()=>stop.current()
      stopCurrent=close
      setPreview(true)
+     },()=>{})
    },750)
  }
  useEffect(()=>{
@@ -31,6 +34,7 @@ export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatc
    {v.image&&<img src={v.image} loading="lazy" alt=""/>}
    {preview&&<iframe className="thumbnail-preview" src={'https://www.youtube.com/embed/'+v.id+'?'+params} title="Muted video preview" tabIndex={-1} aria-hidden="true" allow="autoplay; encrypted-media" referrerPolicy="strict-origin-when-cross-origin"/>}
    {preview&&<span className="preview-label">Muted preview</span>}
+   {restricted&&<span className="preview-label">Original YouTube player</span>}
    {v.duration>0&&<span className="duration">{duration}</span>}
    {v.live&&<span className="live-badge">Live</span>}
    {!!v.scheduledAt&&!v.live&&<span className="live-badge scheduled-badge">Scheduled</span>}

@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
 import {channelId,errorText,type CreatorCredit,type Video} from './domain'
 
-type WatchCreator=CreatorCredit&{title:string;date:string;live:boolean;embeddable:boolean}
+type WatchCreator=CreatorCredit&{title:string;date:string;live:boolean;upcoming?:boolean;embeddable:boolean;description?:string;views?:string;duration?:number}
 const lookedUp=new Map<string,{task:Promise<WatchCreator>;expires:number}>()
 export function lookupCreator(id:string){
  const cached=lookedUp.get(id)
@@ -10,6 +10,7 @@ export function lookupCreator(id:string){
  if(!task){
    task=invoke<WatchCreator>('watch_creator',{id}).then(creator=>{
      if(!channelId(creator.id))throw Error('YouTube didn’t return a public creator.')
+     const cached=lookedUp.get(id);if(cached)cached.expires=Date.now()+(creator.live||creator.upcoming?25_000:6*60*60_000)
      return creator
    }).catch(e=>{lookedUp.delete(id);throw e})
    lookedUp.set(id,{task,expires:Date.now()+30_000})

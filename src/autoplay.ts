@@ -3,6 +3,14 @@ import {categoryFor} from './topics.ts'
 import type {Library} from './library.ts'
 export function nextVideos(current:Video,candidates:Video[],data:Library,played:string[]=[]){
  const topic=categoryFor(current),seen=new Set([current.id,...played])
- const score=(v:Video)=>Number(data.follows.includes(v.channelId))*100+Number(v.channelId===current.channelId)*45+Number(!!topic&&categoryFor(v)===topic)*30+(data.settings.history?Math.min(data.interests[categoryFor(v)??'']??0,20)-Number(!!data.history[v.id])*80:0)
- return unique(candidates).filter(v=>!seen.has(v.id)&&!v.live&&!v.scheduledAt&&v.embeddable&&!data.dismissed.includes(v.id)&&visible(v,data.settings)).sort((a,b)=>score(b)-score(a)).slice(0,24)
+ const score=(v:Video)=>Number(data.follows.includes(v.channelId))*100+Number(v.channelId===current.channelId)*45+Number(!!topic&&categoryFor(v)===topic)*30+Number(data.preferredTopics.includes(categoryFor(v)??''))*25+(data.settings.history?Math.min(data.interests[categoryFor(v)??'']??0,20)-Number(!!data.history[v.id])*80:0)
+ const titles=new Set<string>(),buckets=new Map<string,Video[]>()
+ for(const video of unique(candidates).filter(v=>!seen.has(v.id)&&!v.live&&!v.scheduledAt&&v.embeddable&&!data.dismissed.includes(v.id)&&visible(v,data.settings)).sort((a,b)=>score(b)-score(a))){
+  const title=video.title.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()||video.id
+  if(titles.has(title))continue;titles.add(title)
+  const creator=video.channelId||video.channel;const group=buckets.get(creator)??[];if(group.length<4)group.push(video);buckets.set(creator,group)
+ }
+ const result:Video[]=[]
+ for(let round=0;round<4;round++)for(const group of buckets.values())if(group[round]&&result.length<24)result.push(group[round])
+ return result
 }

@@ -14,7 +14,7 @@ export function useUpNext(current:Video,data:Library,followed:Video[]=[],played:
   if(!current.id)return
   playedThisSession.add(current.id)
   const topic=categoryFor(current)
-  const queries=[topicQuery(topic??'Vlogs'),(current.channel||current.title.slice(0,70))+' videos']
+  const queries=[topicQuery(topic??data.preferredTopics[0]??'Vlogs'),(current.channel||current.title.slice(0,70))+' videos']
   const requests=queries.map(q=>requestCatalog(q,'all'))
   if(current.channelId)requests.push(requestChannel(current.channelId,'videos'))
   for(const task of requests)void task.then(page=>{if(active)setFound(old=>[...old,...page.items.map(v=>v.channelId===current.channelId?fillCreator(v,current.channel,current.channelImage):v)])},()=>{})
