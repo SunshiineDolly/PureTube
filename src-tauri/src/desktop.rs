@@ -79,10 +79,11 @@ fn embedded_video_id(raw: &str) -> Option<String> {
 pub fn configure_tray(app: &tauri::App) -> tauri::Result<()> {
     use super::{read, AppData, Manager, Value};
     use tauri::{
+        Emitter,
         menu::{Menu, MenuItem},
         tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     };
-    let open = MenuItem::with_id(app, "open", "Open Viddy", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "updates", "Check updates", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Viddy", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
     fn restore(app: &tauri::AppHandle) {
@@ -97,7 +98,10 @@ pub fn configure_tray(app: &tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .tooltip("Viddy")
         .on_menu_event(|app, e| match e.id.as_ref() {
-            "open" => restore(app),
+            "updates" => {
+                restore(app);
+                let _ = app.emit_to("main", "open-update-settings", ());
+            },
             "quit" => app.exit(0),
             _ => (),
         })

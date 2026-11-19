@@ -45,6 +45,8 @@ function App() {
  const restoreScroll=useRef(0)
  const routeRef=useRef(route);routeRef.current=route
  const [notice,setNotice]=useState(''),[reminder,setReminder]=useState('')
+ const [updateSettingsRequest,setUpdateSettingsRequest]=useState(0)
+ const handledUpdateSettingsRequest=useRef(0)
  const [text,setText]=useState('')
  const [activeVideo,setActiveVideo]=useState<Video>(),[playbackRun,setPlaybackRun]=useState(0)
  const [playlist,setPlaylist]=useState<PlaylistQueue>();const playlistRef=useRef(playlist);playlistRef.current=playlist
@@ -71,6 +73,12 @@ function App() {
    if(main.current)main.current.scrollTop=restoreScroll.current
    restoreScroll.current=0
  },[route])
+ useLayoutEffect(()=>{
+   if(updateSettingsRequest!==handledUpdateSettingsRequest.current&&route.name==='settings'){
+    document.getElementById('app-updates')?.scrollIntoView({block:'start'})
+    handledUpdateSettingsRequest.current=updateSettingsRequest
+   }
+ },[updateSettingsRequest,route])
  function go(next:Route) {
    if(next.name==='watch'&&route.name==='watch'&&next.video.id===route.video.id)return
    if(next.name==='channel'&&route.name==='channel'&&next.id===route.id&&next.tab===route.tab)return
@@ -127,6 +135,14 @@ function App() {
  }
  useEffect(()=>{
   const subscriptions=[
+   listen('open-update-settings',()=>{
+    const previous=routeRef.current
+    if(previous.name!=='settings'){
+     routes.current.push({route:previous,text:previous.name==='search'?previous.query:'',scroll:main.current?.scrollTop??0})
+     restoreScroll.current=0;setRoute({name:'settings'});setNotice('');setTheater(false)
+    }
+    setUpdateSettingsRequest(n=>n+1)
+   }),
    listen<string>('embedded-video',({payload:id})=>{if(!videoId(id))return;const previous=routeRef.current;if(previous.name==='watch'&&previous.video.id===id)return;routes.current.push({route:previous,text:previous.name==='search'?previous.query:'',scroll:main.current?.scrollTop??0});setPlaylist(undefined);setPlaybackRun(n=>n+1);setActiveVideo(linkVideo(id));setRoute({name:'watch',video:linkVideo(id)})}),
    listen<{video:Video;position:number;duration:number;elapsed:number;started:boolean}>('player-sample',({payload:p})=>{
     if(p.started&&dataRef.current.settings.history)change(d=>{const topic=categoryFor(p.video);return {...d,history:{...d.history,[p.video.id]:Date.now()},interests:topic?{...d.interests,[topic]:(d.interests[topic]??0)+1}:d.interests}})
