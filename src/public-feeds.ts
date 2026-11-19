@@ -48,8 +48,9 @@ export function parseFeed(document:Document,id:string):PublicFeed {
    const link=Array.from(entry.children).find(e=>e.namespaceURI===atom&&e.localName==='link'&&e.getAttribute('rel')==='alternate')?.getAttribute('href')
    const group=child(entry,media,'group')
    const description=group?field(group,media,'description'):''
+   const views=group?Array.from(group.getElementsByTagNameNS(media,'statistics'))[0]?.getAttribute('views'):null
    const shorts=!!(link&&parseVideo(link)?.shorts)||isShorts(name,description,0)||/(?:^|\s)#(?:youtubeshorts|shorts)\b/i.test(description)
-   return [{...linkVideo(video),title:name,description,channelId:id,channel:title,date:new Date(date).toISOString(),image:'https://i.ytimg.com/vi/'+video+'/hqdefault.jpg',shorts,live:!!link&&/youtube\.com\/live\//i.test(link)}]
+   return [{...linkVideo(video),title:name,description,views:views?Number(views).toLocaleString()+' views':undefined,channelId:id,channel:title,date:new Date(date).toISOString(),image:'https://i.ytimg.com/vi/'+video+'/hqdefault.jpg',shorts,live:!!link&&/youtube\.com\/live\//i.test(link)}]
  })
  return {id,title,videos:unique(items).sort(newest),checkedAt:Date.now()}
 }

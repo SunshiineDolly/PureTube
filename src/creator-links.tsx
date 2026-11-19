@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
 import {channelId,errorText,type CreatorCredit,type Video} from './domain'
 
-type WatchCreator=CreatorCredit&{title:string;date:string;live:boolean;upcoming?:boolean;embeddable:boolean;description?:string;views?:string;duration?:number}
+type WatchCreator=CreatorCredit&{title:string;date:string;live:boolean;upcoming?:boolean;embeddable:boolean;description?:string;views?:string;duration?:number;storyboard?:string}
 const lookedUp=new Map<string,{task:Promise<WatchCreator>;expires:number}>()
 export function lookupCreator(id:string){
  const cached=lookedUp.get(id)

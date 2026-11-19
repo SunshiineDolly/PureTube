@@ -12,6 +12,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use std::{
     path::{Path, PathBuf},
+    sync::Mutex,
     time::Duration,
 };
 use tauri::{Manager, State};
@@ -23,6 +24,8 @@ const MAX_LIBRARY: usize = 4 * 1024 * 1024;
 type Result<T> = std::result::Result<T, String>;
 struct AppData {
     db: PathBuf,
+    recovery: Option<PathBuf>,
+    library_guard: Mutex<()>,
     client: reqwest::Client,
     isolated: bool,
 }
@@ -58,15 +61,40 @@ fn write(path: &Path, data: Value) -> Result<()> {
 }
 #[tauri::command]
 fn load(state: State<AppData>) -> Result<Option<Value>> {
-    read(&state.db)
+    let _guard = state.library_guard.lock().map_err(|_| "Library is busy.")?;
+    recover_library(&state.db, state.recovery.as_deref())
+}
+fn recover_library(primary: &Path, recovery: Option<&Path>) -> Result<Option<Value>> {
+    let current = read(primary);
+    if let Ok(Some(data)) = &current {
+        if let Some(backup) = recovery {
+            if let Some(parent) = backup.parent() { let _ = std::fs::create_dir_all(parent); }
+            let _ = write(backup, data.clone());
+        }
+        return current;
+    }
+    if let Some(backup) = recovery.filter(|p| p.is_file()) {
+        if let Ok(Some(data)) = read(backup) {
+            // Preserve a damaged database before replacing it with its independent backup.
+            if current.is_err() { std::fs::rename(primary, primary.with_extension("damaged.sqlite3")).map_err(|_| "Could not preserve the damaged library.")?; }
+            write(primary, data.clone())?;
+            return Ok(Some(data));
+        }
+    }
+    current
 }
 #[tauri::command]
 fn save(app: tauri::AppHandle, state: State<AppData>, data: Value) -> Result<()> {
+    let _guard = state.library_guard.lock().map_err(|_| "Library is busy.")?;
     let show_tray = data
         .pointer("/settings/tray")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    write(&state.db, data)?;
+    write(&state.db, data.clone())?;
+    if let Some(recovery) = &state.recovery {
+        if let Some(parent) = recovery.parent() { std::fs::create_dir_all(parent).map_err(|_| "Library saved, but its Documents backup folder is unavailable.")?; }
+        write(recovery, data).map_err(|_| "Library saved, but its Documents backup could not be updated.")?;
+    }
     if let Some(tray) = app.tray_by_id("puretube") {
         let _ = tray.set_visible(show_tray);
     }
@@ -325,6 +353,8 @@ fn main() {
                 .build()?;
             app.manage(AppData {
                 db: dir.join("library.sqlite3"),
+                recovery: if isolated { None } else { Some(app.path().document_dir()?.join("Viddy/library-backup.sqlite3")) },
+                library_guard: Mutex::new(()),
                 client,
                 isolated,
             });
@@ -371,6 +401,20 @@ fn main() {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn independent_backup_recovers_removed_or_damaged_app_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = dir.path().join("app.sqlite3");
+        let backup = dir.path().join("documents.sqlite3");
+        let value = json!({"version":1,"follows":["creator"],"collections":[{"name":"Study","ids":["video"]}]});
+        write(&backup, value.clone()).unwrap();
+        assert_eq!(recover_library(&primary, Some(&backup)).unwrap(), Some(value.clone()));
+        std::fs::write(&primary, b"damaged database").unwrap();
+        assert_eq!(recover_library(&primary, Some(&backup)).unwrap(), Some(value.clone()));
+        assert!(primary.with_extension("damaged.sqlite3").is_file());
+        write(&primary, json!({"version":1,"follows":[]})).unwrap();
+        assert_eq!(recover_library(&primary, Some(&backup)).unwrap().unwrap()["follows"], json!([]));
+    }
     #[test]
     fn persists_beyond_connection_and_replaces_snapshot() {
         let dir = tempfile::tempdir().unwrap();

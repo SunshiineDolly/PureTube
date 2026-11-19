@@ -4,6 +4,18 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use tauri::State;
 
+fn animated_thumbnail(node: &Value, depth: usize) -> Option<String> {
+    if depth == 0 { return None; }
+    if let Some(url) = node.get("url").and_then(Value::as_str) {
+        if url.starts_with("https://i.ytimg.com/an_webp/") { return Some(url.to_owned()); }
+    }
+    match node {
+        Value::Object(map) => map.values().find_map(|v| animated_thumbnail(v, depth-1)),
+        Value::Array(list) => list.iter().find_map(|v| animated_thumbnail(v, depth-1)),
+        _ => None,
+    }
+}
+
 fn search_url(query: &str, filter: &str) -> Result<Url> {
     let query = query.trim();
     if query.is_empty() || query.chars().count() > 256 {
@@ -222,7 +234,7 @@ fn lockup_video(lockup: &Value) -> Option<Value> {
         .unwrap_or(0);
     Some(
         json!({"id":id,"title":title,"channelId":channel,"channel":name,"creators":creators,
-        "channelImage":find_avatar(&meta["image"],14).unwrap_or_default(),"description":"","date":"","publishedLabel":label,"views":views,
+        "previewImage":animated_thumbnail(lockup,18),"channelImage":find_avatar(&meta["image"],14).unwrap_or_default(),"description":"","date":"","publishedLabel":label,"views":views,
         "duration":duration,"live":live,"upcoming":upcoming,"shorts":false,"paid":false,"embeddable":true,
         "image":thumbnail(&lockup["contentImage"]["thumbnailViewModel"]["image"]["sources"],id)}),
     )
@@ -318,7 +330,7 @@ fn video(renderer: &Value) -> Option<Value> {
         "id": id, "title": title, "channelId": channel_id, "channel": channel,"creators":creators,
         "description": description, "duration": duration, "live": live, "upcoming":upcoming,"scheduledAt":scheduled_at,
         "publishedLabel": text(&renderer["publishedTimeText"]),
-        "views":text(&renderer["viewCountText"]),
+        "previewImage":animated_thumbnail(renderer,18),"views":text(&renderer["viewCountText"]),
         "channelImage": avatar(&renderer["channelThumbnailSupportedRenderers"]["channelThumbnailWithLinkRenderer"]["thumbnail"]["thumbnails"][0]["url"]).unwrap_or_default(),
         "image": thumbnail(&renderer["thumbnail"]["thumbnails"],id),
         "date": "", "shorts": false, "paid": false, "embeddable": true,
@@ -397,7 +409,7 @@ pub async fn watch_creator(state: State<'_, AppData>, id: String) -> Result<Valu
         .ok_or("YouTube didn’t return a public creator for this video.")?;
     Ok(
         json!({"id":channel,"name":details["author"].as_str().or_else(||metadata["ownerChannelName"].as_str()).unwrap_or("Creator"),
-       "date":metadata["publishDate"].as_str().unwrap_or_default(),"title":details["title"].as_str().unwrap_or_default(),
+       "storyboard":data.pointer("/storyboards/playerStoryboardSpecRenderer/spec").and_then(Value::as_str).unwrap_or_default(),"date":metadata["publishDate"].as_str().unwrap_or_default(),"title":details["title"].as_str().unwrap_or_default(),
        "live":is_live(&data),"upcoming":data["videoDetails"]["isUpcoming"]==true,"embeddable":data["playabilityStatus"]["playableInEmbed"]!=false,"description":details["shortDescription"].as_str().unwrap_or_default(),"views":details["viewCount"].as_str().map(|v|format!("{v} views")).unwrap_or_default(),"duration":details["lengthSeconds"].as_str().and_then(|v|v.parse::<u64>().ok()).unwrap_or(0)}),
     )
 }

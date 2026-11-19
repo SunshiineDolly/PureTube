@@ -17,7 +17,7 @@ export function Preferences({data,setting,change,updates}:{data:Library;setting:
  const s=data.settings,[message,setMessage]=useState(''),[autostart,setAutostart]=useState(false),[blocked,setBlocked]=useState(''),[busy,setBusy]=useState(false)
  useEffect(()=>{invoke<boolean>('startup',{enabled:null}).then(setAutostart).catch(e=>setMessage(errorText(e)))},[])
  async function action(fn:()=>Promise<void>) {setBusy(true);setMessage('');try{await fn()}catch(e){setMessage(errorText(e))}finally{setBusy(false)}}
- const toggle=(k:'collapsed'|'history'|'progress'|'showTime'|'focus'|'tray'|'autoplay'|'intro'|'themedCursor',label:string)=><Toggle label={label} value={s[k]} onChange={v=>setting(k,v)}/>
+ const toggle=(k:'collapsed'|'history'|'progress'|'showTime'|'tray'|'autoplay'|'intro'|'themedCursor',label:string)=><Toggle label={label} value={s[k]} onChange={v=>setting(k,v)}/>
  return <div className="settings">
  {message&&<p className="notice sticky" role="status">{message}</p>}
  <section><h2><Palette/> Appearance</h2><label>Theme <select value={s.theme} onChange={e=>setting('theme',e.target.value as Settings['theme'])}><option value="dark">Dark</option><option value="light">Light</option></select></label>
@@ -30,10 +30,10 @@ export function Preferences({data,setting,change,updates}:{data:Library;setting:
  <p>Viddy excludes Shorts that YouTube identifies in its public results, links, or creator tags.</p>
  </section>
  <section><h2><PlaySquare/> Playback</h2><p>Videos start when selected. Use the player’s controls for playback or fullscreen. YouTube may show ads and related videos inside its player.</p>
- {toggle('autoplay','Autoplay recommendations after a video ends')}{toggle('focus','Open videos in Focus Player')}{toggle('progress','Track playback progress')}{toggle('showTime','Show viewing time this session')}
+ {toggle('autoplay','Autoplay recommendations after a video ends')}{toggle('progress','Track playback progress')}{toggle('showTime','Show viewing time this session')}
  <label>Daily viewing reminder (minutes; 0 disables) <input type="number" min="0" max="1440" value={s.reminder} onChange={e=>setting('reminder',Math.min(1440,Math.max(0,Math.floor(Number(e.target.value)||0))))}/></label>
  </section>
- <section><h2><Shield/> Privacy and library</h2>{toggle('history','Track watch history')}<p>Follows, watch history, progress, collections, and preferences are kept on this PC. Google receives requests for public search, feeds, thumbnails, and playback.</p>
+ <section><h2><Shield/> Privacy and library</h2>{toggle('history','Track watch history')}<p>Follows, watch history, progress, collections, and preferences are kept on this PC. An independent library backup in Documents/Viddy restores your follows, playlists, history and preferences after reinstalling on this PC. Export a backup to keep a copy elsewhere. Google receives requests for public search, feeds, thumbnails, and playback.</p>
  <div className="row wrap">{([['terms','YouTube Terms of Service'],['privacy','Google Privacy Policy']] as const).map(([page,label])=><button className="button" key={page} onClick={()=>void action(()=>invoke('open_info',{page}))}>{label}</button>)}</div>
  <div className="row wrap"><button className="button" disabled={busy} onClick={()=>void action(async()=>{if(await invoke('export_library',{data}))setMessage('Library backup saved.')})}><Download size={16}/> Export backup</button>
  <button className="button" disabled={busy} onClick={()=>void action(async()=>{const imported=await invoke<unknown>('import_library');if(!imported)return;const decoded=decode(imported);if(!confirm('Replace your current Viddy library and preferences with this backup?'))return;change(()=>decoded);setMessage('Library imported.')})}><Upload size={16}/> Import backup</button>

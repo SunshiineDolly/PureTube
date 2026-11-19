@@ -1,7 +1,7 @@
 import {RefreshCw} from 'lucide-react'
 import {useEffect,useRef,useState} from 'react'
 import {playbackClock} from './playback-clock'
-type Player = {destroy():void;getCurrentTime():number;getDuration():number;getPlayerState():number;loadVideoById(id:string):void;seekTo(position:number,allow:boolean):void}
+type Player = {destroy():void;getCurrentTime():number;getDuration():number;getPlayerState():number;getVideoUrl():string;loadVideoById(id:string):void;seekTo(position:number,allow:boolean):void}
 type Events = {onReady:()=>void;onError:(e:{data:number})=>void;onStateChange:(e:{data:number})=>void}
 declare global { interface Window { YT?:{Player:new (frame:HTMLIFrameElement, config:{events:Events})=>Player};onYouTubeIframeAPIReady?:()=>void } }
 let api:Promise<NonNullable<Window['YT']>>|undefined
@@ -16,8 +16,8 @@ function playerApi() {
    document.head.appendChild(script)
  }).catch(e=>{api=undefined;throw e}) as Promise<NonNullable<Window['YT']>>
 }
-export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,sampleInterval=8}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;sampleInterval?:number}) {
- const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController,onRestricted})
+export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,sampleInterval=8}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;onVideoChange?:(id:string)=>void;sampleInterval?:number}) {
+ const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange})
  const initial=useRef(start)
  const resume=useRef(start),seekWhenReady=useRef(()=>{})
  resume.current=start
@@ -25,7 +25,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
  const [error,setError]=useState('')
  const [liveState,setLiveState]=useState<'connecting'|'playing'|'paused'|'buffering'|'ended'>('connecting')
  const jump=useRef<()=>void>(()=>{})
- callbacks.current={onSample,onPlay,onElapsed,onEnded,onController,onRestricted}
+ callbacks.current={onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange}
  useEffect(()=>{
    const host=mount.current!
    const frame=document.createElement('iframe')
@@ -76,6 +76,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
        onReady:()=>{ready=true;sample();callbacks.current.onController?.(()=>player?.getCurrentTime()??0);seekWhenReady.current()},
        onStateChange:e=>{
          if(closed)return
+         if(e.data===1&&player){try{const selected=new URL(player.getVideoUrl()).searchParams.get('v');if(selected&&/^[\w-]{11}$/.test(selected)&&selected!==id){callbacks.current.onVideoChange?.(selected);return}}catch{}}
          count(e.data===1)
          if(e.data===1 && !played) {played=true;callbacks.current.onPlay()}
          if(live){

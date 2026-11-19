@@ -67,7 +67,7 @@ export function useRecommendations(surface:Surface,data:Library){
        if(!active||generation.current!==run)return
        successes++;sources[index]={...source,next:page.next}
        pool.push(...page.items.map(v=>({...v,category:source.topic})))
-       const items=rankRecommendations(pool,current.current,seen,seed,other())
+       const items=rankRecommendations(pool,current.current,seen,seed,other(),48,surface)
        // Keep already-visible cards in place while the other requests finish.
        const displayed=successes===1?[]:sessionRef.current?.items??[]
        store({items:appendRecommendations(displayed,items,60),sources:[...sources],seed,at:Date.now(),busy:pending>1})
@@ -75,7 +75,7 @@ export function useRecommendations(surface:Surface,data:Library){
        if(active&&generation.current===run&&successes===0)store({...sessionRef.current!,error:errorText(error),busy:pending>1})
      }).finally(()=>{
        pending--
-       if(active&&generation.current===run&&pending===0)store({...sessionRef.current!,items:successes?rankRecommendations(pool,current.current,seen,seed,other(),90):sessionRef.current!.items,busy:false,error:successes?undefined:sessionRef.current?.error})
+       if(active&&generation.current===run&&pending===0)store({...sessionRef.current!,items:successes?rankRecommendations(pool,current.current,seen,seed,other(),90,surface):sessionRef.current!.items,busy:false,error:successes?undefined:sessionRef.current?.error})
      })
    }
    return ()=>{active=false;generation.current++}
@@ -100,7 +100,7 @@ export function useRecommendations(surface:Surface,data:Library){
      let page=await requestCatalog(source.query,source.filter,source.next)
      const existing=new Set(sessionRef.current?.items.map(v=>v.id)??[])
      const exclusions=new Set([...other(),...existing])
-     let candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,base.seed,exclusions,30)
+     let candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,base.seed,exclusions,30,surface)
      for(let skip=0;!candidates.length&&page.next&&skip<2;skip++){
        const cursor=page.next
        page=await requestCatalog(source.query,source.filter,cursor)

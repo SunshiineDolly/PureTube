@@ -21,7 +21,7 @@ const alternatives:Record<string,string[]>={
 }
 export function recommendationPlan(data:Library,surface:Surface,seed:number){
  const ranked=rankedTopics(data.settings.history?data.interests:{})
- const preferred=[...topics.filter(t=>data.preferredTopics.includes(t.name)),...(data.settings.history?ranked.filter(t=>(data.interests[t.name]??0)>0):[])].filter((t,i,a)=>a.findIndex(x=>x.name===t.name)===i).slice(0,10)
+ const preferred=surface==='discover'?[]:[...topics.filter(t=>data.preferredTopics.includes(t.name)),...(data.settings.history?ranked.filter(t=>(data.interests[t.name]??0)>0):[])].filter((t,i,a)=>a.findIndex(x=>x.name===t.name)===i).slice(0,10)
  const shuffled=[...topics].sort((a,b)=>hash(surface+seed+a.name)-hash(surface+seed+b.name))
  const chosen=unique([
    ...Array.from({length:Math.min(surface==='home'?2:1,preferred.length)},(_,i)=>{const t=preferred[(seed+i)%preferred.length];return {...t,id:t.name}}),
@@ -39,16 +39,16 @@ export function recommendationPlan(data:Library,surface:Surface,seed:number){
  return plan
 }
 
-export function rankRecommendations(items:Video[],data:Library,seen:Record<string,number>,seed:number,excluded:Set<string>,limit=48){
+export function rankRecommendations(items:Video[],data:Library,seen:Record<string,number>,seed:number,excluded:Set<string>,limit=48,surface:Surface='home'){
  const now=Date.now(),watched=data.settings.history?data.history:{}
  const candidates=unique(items).filter(v=>!v.live&&!v.scheduledAt&&!excluded.has(v.id)&&!data.dismissed.includes(v.id)&&!watched[v.id]&&!(data.settings.progress&&data.progress[v.id]?.at>0)&&visible(v,data.settings))
  const score=(v:Video)=>{
    const exposure=seen[v.id]??0
    const penalty=exposure?Math.max(0,1-(now-exposure)/86_400_000)*1000:0
-   const affinity=(v.category&&data.preferredTopics.includes(v.category)?22:0)+(data.settings.history&&v.category?Math.min(data.interests[v.category]??0,15):0)
+   const affinity=surface==='discover'?0:(v.category&&data.preferredTopics.includes(v.category)?22:0)+(data.settings.history&&v.category?Math.min(data.interests[v.category]??0,15):0)
    const label=v.publishedLabel?.toLowerCase()??''
    const fresh=/\b(?:\d+\s*(?:h|hr|hour|d|day|w|wk|week)s?)\s+ago\b/.test(label)?18:0
-   return hash(seed+v.id)%35+affinity*2+fresh+Number(data.follows.includes(v.channelId))*25-penalty
+   return hash(seed+v.id)%35+affinity*2+fresh+Number(surface==='home'&&data.follows.includes(v.channelId))*25-penalty
  }
  candidates.sort((a,b)=>score(b)-score(a))
  const counts=new Map<string,number>(),titles=new Set<string>(),result:Video[]=[]

@@ -4,7 +4,7 @@ import {readAccent,type Accent} from './palettes.ts'
 export type Settings = {
   theme:'dark'|'light'; accent:Accent; collapsed:boolean; density:'compact'|'comfortable';
   keywords:string[]; blocked:string[]; history:boolean; progress:boolean;
-  reminder:number; showTime:boolean; focus:boolean; tray:boolean; autoplay:boolean;intro:boolean;themedCursor:boolean
+  reminder:number; showTime:boolean;  tray:boolean; autoplay:boolean;intro:boolean;themedCursor:boolean
 }
 export type Library = {
  version:1; profileName:string; profileBio:string;profileEmoji:string;preferredTopics:string[];savedVideos:Record<string,Video>;settings:Settings; follows:string[]; groups:Record<string,string>; later:string[]; favorites:string[];
@@ -12,7 +12,7 @@ export type Library = {
  checked:Record<string,string>; interests:Record<string,number>; daily:{date:string;seconds:number}; liveReminders:Record<string,LiveReminder>;dismissed:string[]
 }
 export type LiveReminder={title:string;at:number}
-export const defaults:Settings = {theme:'dark',accent:'rose',collapsed:false,density:'comfortable',keywords:[],blocked:[],history:true,progress:true,reminder:0,showTime:false,focus:false,tray:false,autoplay:true,intro:true,themedCursor:true}
+export const defaults:Settings = {theme:'dark',accent:'rose',collapsed:false,density:'comfortable',keywords:[],blocked:[],history:true,progress:true,reminder:0,showTime:false,tray:false,autoplay:true,intro:true,themedCursor:true}
 export const empty = ():Library => ({version:1,profileName:'',profileBio:'',profileEmoji:'',preferredTopics:[],savedVideos:{},settings:{...defaults},follows:[],groups:{},later:[],favorites:[],collections:[],history:{},progress:{},checked:{},interests:{},daily:{date:'',seconds:0},liveReminders:{},dismissed:[]})
 export const profileEmojis=['','🎀','🌷','🍒','🦋','🪷','🌙','🍓','🌿']
 export function rememberVideo(data:Library,video:Video):Library {
@@ -36,7 +36,7 @@ export function decode(raw:unknown):Library {
    if ((choices[k] as readonly unknown[]).includes(s[k])) Object.assign(settings,{[k]:s[k]})
  }
  settings.accent=readAccent(s.accent)
- for (const k of ['collapsed','history','progress','showTime','focus','tray','autoplay','intro','themedCursor'] as const) {
+ for (const k of ['collapsed','history','progress','showTime','tray','autoplay','intro','themedCursor'] as const) {
    if (typeof s[k]==='boolean') settings[k]=s[k]
  }
  if (finite(s.reminder)) settings.reminder=Math.min(1440,Math.trunc(s.reminder))
@@ -48,7 +48,7 @@ export function decode(raw:unknown):Library {
  const savedVideos:Record<string,Video>={}
  for(const [id,value] of Object.entries(record(r.savedVideos)).slice(0,300)){
   const v=record(value);if(!videoId(id)||typeof v.title!=='string')continue
-  savedVideos[id]={id,title:v.title.slice(0,500),channelId:typeof v.channelId==='string'&&channelId(v.channelId)?v.channelId:'',channel:typeof v.channel==='string'?v.channel.slice(0,200):'',description:typeof v.description==='string'?v.description.slice(0,1500):'',date:typeof v.date==='string'?v.date.slice(0,50):'',image:'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg',duration:finite(v.duration)?v.duration:0,live:v.live===true,shorts:v.shorts===true,paid:v.paid===true,embeddable:v.embeddable!==false,category:typeof v.category==='string'?v.category.slice(0,40):undefined,publishedLabel:typeof v.publishedLabel==='string'?v.publishedLabel.slice(0,80):undefined}
+  savedVideos[id]={id,title:v.title.slice(0,500),channelId:typeof v.channelId==='string'&&channelId(v.channelId)?v.channelId:'',channel:typeof v.channel==='string'?v.channel.slice(0,200):'',description:typeof v.description==='string'?v.description.slice(0,1500):'',date:typeof v.date==='string'?v.date.slice(0,50):'',image:'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg',views:typeof v.views==='string'?v.views.slice(0,80):undefined,duration:finite(v.duration)?v.duration:0,live:v.live===true,shorts:v.shorts===true,paid:v.paid===true,embeddable:v.embeddable!==false,category:typeof v.category==='string'?v.category.slice(0,40):undefined,publishedLabel:typeof v.publishedLabel==='string'?v.publishedLabel.slice(0,80):undefined}
  }
  return {...d,profileName:profileName(r.profileName),profileBio:typeof r.profileBio==='string'?r.profileBio.replace(/[\u0000-\u001f\u007f]/g,'').slice(0,280):'',profileEmoji:profileEmojis.includes(r.profileEmoji as string)?r.profileEmoji as string:'',preferredTopics:strings(r.preferredTopics,name=>topics.some(t=>t.name===name)).slice(0,10),savedVideos,settings, follows:strings(r.follows,channelId), later:strings(r.later,videoId), favorites:strings(r.favorites,videoId),dismissed:strings(r.dismissed,videoId),
    groups:entries(r.groups,channelId,(x):x is string=>typeof x==='string' && x.length<=80),

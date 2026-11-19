@@ -7,6 +7,13 @@ import type {Video} from '../src/domain.ts'
 const video=(n:number,creator='creator-'+n):Video=>({
  id:String(n).padStart(11,'0'),title:'Video '+n,description:'',channelId:creator,channel:creator,date:'',image:'',duration:120,category:n%2?'Gaming':'Food',shorts:false,paid:false,embeddable:true,
 })
+test('Discover query choices and ranking ignore interests, preferences and followed creators',()=>{
+ const neutral=empty(),personal=empty();personal.interests={Gaming:500,Food:1};personal.preferredTopics=['Gaming'];personal.follows=['creator-1']
+ assert.deepEqual(recommendationPlan(personal,'discover',42),recommendationPlan(neutral,'discover',42))
+ const items=Array.from({length:12},(_,n)=>video(n))
+ assert.deepEqual(rankRecommendations(items,personal,{},42,new Set(),48,'discover'),rankRecommendations(items,neutral,{},42,new Set(),48,'discover'))
+ assert.notDeepEqual(recommendationPlan(personal,'home',42),recommendationPlan(neutral,'home',42))
+})
 test('recommendations suppress watched, dismissed, Shorts, live, and the other page’s picks',()=>{
  const data=empty(),items=Array.from({length:9},(_,n)=>video(n))
  data.history[items[0].id]=Date.now();data.dismissed=[items[1].id]

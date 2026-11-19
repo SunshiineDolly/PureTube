@@ -6,7 +6,7 @@ import {nextVideos} from './autoplay'
 import {categoryFor,topicQuery,rankedTopics,topics} from './topics'
 import {fillCreator,errorText,type Video} from './domain'
 import type {Library} from './library'
-import {AutoMore} from './components'
+import {AutoMore,day} from './components'
 const playedThisSession=new Set<string>()
 type Source={query?:string;channel?:string;next:CatalogPage['next']}
 export function useUpNext(current:Video,data:Library,followed:Video[]=[],played:string[]=[]){
@@ -62,9 +62,9 @@ export function UpNext({videos,autoplay,ended,onToggle,onWatch,onQueue,queued=[]
   if(seconds===0){onWatch(next);return}
   const timer=setTimeout(()=>setSeconds(n=>n-1),1000);return()=>clearTimeout(timer)
  },[ended,autoplay,cancelled,next?.id,seconds])
- return <section className="up-next" aria-label="Up next" data-continuation-pages={pages}><div className="row"><h2>Up next</h2>{queueActive?<span className="meta">Queue plays first</span>:<label className="autoplay-toggle"><input type="checkbox" checked={autoplay} onChange={onToggle}/> Autoplay</label>}</div>
+ return <section className="up-next" aria-label="Up next" data-continuation-pages={pages}><div className="row"><h2>Up next</h2>{queueActive?<span className="meta">Queue plays first</span>:<button className="autoplay-switch" role="switch" aria-checked={autoplay} aria-label="Autoplay" title={autoplay?'Turn autoplay off':'Turn autoplay on'} onClick={onToggle}><span/>Autoplay</button>}</div>
  {ended&&autoplay&&!cancelled&&next&&<div className="autoplay-countdown" role="status"><span>Playing next in {seconds}s</span><button className="button" onClick={()=>onWatch(next)}><Play size={14}/> Play now</button><button className="icon" aria-label="Cancel autoplay" onClick={()=>setCancelled(true)}><X size={17}/></button></div>}
- <div className="up-next-list">{videos.slice(0,limit).map(v=><div className="up-next-item" key={v.id} data-video-id={v.id}><button className="up-next-card" onClick={()=>onWatch(v)}><img src={v.image} alt="" loading="lazy"/><span><strong>{v.title}</strong><small>{v.channel}</small></span></button>{onQueue&&<button className="icon small up-next-queue" aria-label={queued.includes(v.id)?v.title+' is queued':'Add '+v.title+' to queue'} title={queued.includes(v.id)?'Queued':'Add to queue'} disabled={queued.includes(v.id)} onClick={()=>onQueue(v)}>{queued.includes(v.id)?<Check size={15}/>:<ListPlus size={15}/>}</button>}</div>)}</div>
+ <div className="up-next-list">{videos.slice(0,limit).map(v=><div className="up-next-item" key={v.id} data-video-id={v.id}><button className="up-next-card" onClick={()=>onWatch(v)}><img src={v.image} alt="" loading="lazy"/><span><strong>{v.title}</strong><small>{v.channel}</small><small>{[v.views,day(v.date)||v.publishedLabel].filter(Boolean).join(' · ')}</small></span></button>{onQueue&&<button className="icon small up-next-queue" aria-label={queued.includes(v.id)?v.title+' is queued':'Add '+v.title+' to queue'} title={queued.includes(v.id)?'Queued':'Add to queue'} disabled={queued.includes(v.id)} onClick={()=>onQueue(v)}>{queued.includes(v.id)?<Check size={15}/>:<ListPlus size={15}/>}</button>}</div>)}</div>
  {!next&&<p className="meta">{busy?'Finding unwatched videos…':'Scroll for more unwatched videos.'}</p>}
  {(onMore||videos.length>limit)&&<AutoMore enabled={true} busy={busy} error={error} onReach={()=>{if(videos.length>limit)setLimit(n=>n+8);else if(onMore)void onMore().then(()=>setLimit(n=>n+8))}}/>}
  </section>
