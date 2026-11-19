@@ -140,6 +140,24 @@ export function useWatchTogether(getPlayback:()=>RoomPlayback|undefined,activeId
 export function WatchTogether({session,canHost,dialog}:{session:ReturnType<typeof useWatchTogether>;canHost:boolean;dialog:RefObject<HTMLDialogElement|null>}){
  const [input,setInput]=useState(''),[copied,setCopied]=useState(''),[copyError,setCopyError]=useState(false)
  const {room,message,busy,connected}=session
+ const closing=useRef<ReturnType<typeof setTimeout>|undefined>(undefined)
+ const previousConnected=useRef(connected)
+ function fadeOut(){
+   const panel=dialog.current
+   if(!panel?.open||closing.current!==undefined)return
+   if(matchMedia('(prefers-reduced-motion: reduce)').matches){panel.close();return}
+   panel.dataset.closing='true'
+   closing.current=setTimeout(()=>{
+     panel.close()
+     delete panel.dataset.closing
+     closing.current=undefined
+   },180)
+ }
+ useEffect(()=>{
+   if(connected>previousConnected.current)fadeOut()
+   previousConnected.current=connected
+ },[connected])
+ useEffect(()=>()=>clearTimeout(closing.current),[])
  const copy=(code:string)=>void navigator.clipboard.writeText(code).then(()=>{setCopied(code);setCopyError(false)},()=>setCopyError(true))
  const field=(label:string,submit:(code:string)=>Promise<void>,button:string)=><form className="room-code" onSubmit={e=>{e.preventDefault();void submit(input.trim())}}>
    <label>{label}<input placeholder={label} value={input} maxLength={32000} onChange={e=>setInput(e.target.value)}/></label>
@@ -149,12 +167,13 @@ export function WatchTogether({session,canHost,dialog}:{session:ReturnType<typeo
    <label>{label}<input readOnly value={value} onFocus={e=>e.currentTarget.select()}/></label>
    <button className="button accent" onClick={()=>copy(value)}><Copy size={15}/>{copied===value?'Copied':'Copy'}</button>
  </div>
- const leave=()=>{setInput('');session.leave()}
- return <dialog ref={dialog} className="room-panel" aria-labelledby="room-title" onClose={()=>setCopyError(false)}>
+ const leave=()=>{setInput('');session.leave();fadeOut()}
+ return <dialog ref={dialog} className="room-panel" aria-labelledby="room-title" onClose={()=>setCopyError(false)}
+   onCancel={e=>{e.preventDefault();fadeOut()}} onClick={e=>{if(e.target===e.currentTarget)fadeOut()}}>
    <header className="room-heading">
      <span className="room-mark"><Users size={20}/></span>
      <div><h2 id="room-title">Watch Together</h2><p>Sync a video with friends on Viddy.</p></div>
-     <button className="icon" aria-label="Close Watch Together" onClick={()=>dialog.current?.close()}><X size={18}/></button>
+     <button className="icon" aria-label="Close Watch Together" onClick={fadeOut}><X size={18}/></button>
    </header>
    <section className="room-body">
      {message&&<p className="room-status" role="status">{message}</p>}

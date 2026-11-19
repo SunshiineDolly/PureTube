@@ -71,9 +71,7 @@ try{
   assert.deepEqual(playback,{video:'aqz-KE-bpKQ',position:42,playing:false})
 
   await evaluate(`(()=>{
-    document.querySelector('button[aria-label="Watch Together"]').click()
-    if(!document.querySelector('dialog.room-panel').open)throw Error('Room dialog did not open')
-    document.querySelector('button[aria-label="Close Watch Together"]').click()
+    if(document.querySelector('button[aria-label="Watch Together"]'))throw Error('Watch Together should not be on Home')
     const input=document.querySelector('.searchbar input')
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'Big Buck Bunny 60fps')
     input.dispatchEvent(new Event('input',{bubbles:true}))
@@ -97,10 +95,48 @@ try{
     if(!frame?.src.startsWith('https://www.youtube.com/embed/aqz-KE-bpKQ?'))return 'preview did not play'
     button.dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:document.body}))
     await delay(100)
-    return button.querySelector('iframe')?'preview did not stop':'played'
+    if(button.querySelector('iframe'))return 'preview did not stop'
+    button.click()
+    return 'played'
   })()`)
   assert.equal(played,'played')
-  console.log('Room code exchange passed, the Watch Together dialog opened, and the YouTube hover preview played and stopped on pointer exit.')
+  const centered=await evaluate(`(async()=>{
+    const button=document.querySelector('.watch-overview button[aria-label="Watch Together"]')
+    if(!button)throw Error('Watch Together was missing on the video page')
+    button.click()
+    await new Promise(resolve=>setTimeout(resolve,225))
+    const dialog=document.querySelector('dialog.room-panel')
+    const bounds=dialog.getBoundingClientRect()
+    const centered=dialog.open&&Math.abs(bounds.x+bounds.width/2-innerWidth/2)<3&&Math.abs(bounds.y+bounds.height/2-innerHeight/2)<3
+    dialog.querySelector('button[aria-label="Close Watch Together"]').click()
+    const fades=dialog.open&&dialog.dataset.closing==='true'
+    await new Promise(resolve=>setTimeout(resolve,225))
+    return centered&&fades&&!dialog.open
+  })()`)
+  assert.ok(centered,'Watch Together should open centered and fade out')
+  console.log('Room code exchange passed, Watch Together centered and faded out, and the YouTube hover preview played and stopped on pointer exit.')
+
+  await evaluate(`(async()=>{
+    const invoke=window.__TAURI_INTERNALS__.invoke
+    const data=await invoke('load')??{version:1}
+    await invoke('save',{data:{...data,liveReminders:{aqz_KE_TEST:{title:'Saved fixture outside search',at:Date.now()+3600000}}}})
+    setTimeout(()=>location.reload(),100)
+  })()`)
+  await wait(1200)
+  const reminder=await evaluate(`(async()=>{
+    const until=Date.now()+10000
+    const pause=()=>new Promise(resolve=>setTimeout(resolve,150))
+    while(Date.now()<until&&!document.querySelector('.top-menu:not(:disabled)'))await pause()
+    document.querySelector('.sidebar button[aria-label="Live"]').click()
+    while(Date.now()<until&&!document.querySelector('.live-mode-tabs'))await pause()
+    const scheduled=[...document.querySelectorAll('.live-mode-tabs button')].find(b=>b.textContent==='Scheduled')
+    scheduled?.click()
+    while(Date.now()<until&&!document.querySelector('.scheduled-reminders'))await pause()
+    const shelf=document.querySelector('.scheduled-reminders')
+    return shelf?.textContent.includes('Saved fixture outside search')&&shelf?.textContent.includes('Reminder set')
+  })()`)
+  assert.ok(reminder,'A saved reminder should appear without a matching public search result')
+  console.log('Scheduled reminders appeared from storage independently of the public catalog.')
 }finally{
   socket?.close()
   if(child.exitCode===null)child.kill()

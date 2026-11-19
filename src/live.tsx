@@ -1,14 +1,16 @@
 import {useEffect,useRef,useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
 import {Bell} from 'lucide-react'
-import type {Library} from './library'
+import {rememberVideo,type Library} from './library'
+import {linkVideo} from './public-feeds'
 import type {Video} from './domain'
 
 type LiveStatus='live'|'waiting'|'ended'|'unknown'
-const pending=new Map<string,Promise<LiveStatus>>()
+type StreamStatus={status:LiveStatus;start?:string}
+const pending=new Map<string,Promise<StreamStatus>>()
 function checkLive(id:string){
  let task=pending.get(id)
- if(!task){task=invoke<LiveStatus>('live_status',{id}).catch(()=> 'unknown' as const).finally(()=>pending.delete(id));pending.set(id,task)}
+ if(!task){task=invoke<StreamStatus>('live_status',{id,details:true}).catch(()=>({status:'unknown' as const})).finally(()=>pending.delete(id));pending.set(id,task)}
  return task
 }
 
@@ -17,7 +19,7 @@ export function useScheduledStatus(id:string,at?:number|null){
  useEffect(()=>{
    if(!at)return
    let active=true
-   const poll=()=>{if(Date.now()>=at)void checkLive(id).then(s=>{if(active&&s!=='unknown')setStatus(s)})}
+   const poll=()=>{if(Date.now()>=at-60_000)void checkLive(id).then(({status})=>{if(active&&status!=='unknown')setStatus(status)})}
    poll()
    const timer=setInterval(poll,15_000)
    return ()=>{active=false;clearInterval(timer)}
@@ -32,23 +34,34 @@ export function useLiveReminders(data:Library,change:(fn:(d:Library)=>Library)=>
  useEffect(()=>{
    if(!ready)return
    let active=true,running=false,offset=0
+   const checked=new Map<string,number>()
    async function poll(){
      if(running)return
      const now=Date.now()
-     const entries=Object.entries(current.current.data.liveReminders).filter(([,r])=>r.at<=now)
+     const entries=Object.entries(current.current.data.liveReminders).filter(([id,r])=>
+       now-(checked.get(id)??0)>=(r.at<=now+60_000&&r.at>=now-3600_000?14_000:120_000))
      if(!entries.length)return
      running=true
      try{
        const batch=entries.slice(offset%entries.length).concat(entries.slice(0,offset%entries.length)).slice(0,5)
        offset+=batch.length
-       const results=await Promise.all(batch.map(async ([id,r])=>({id,title:r.title,status:now-r.at>86_400_000?'ended':await checkLive(id)})))
+       const results=await Promise.all(batch.map(async ([id,r])=>{
+         checked.set(id,now)
+         return {id,reminder:r,...await checkLive(id)}
+       }))
        if(!active)return
-       const recent=results.filter(r=>(r.status==='live'||r.status==='ended')&&current.current.data.liveReminders[r.id])
-       if(!recent.length)return
-       setAlerts(list=>[...list,...recent.filter(r=>r.status==='live'&&!list.some(a=>a.id===r.id))].slice(-8))
+       const recent=results.filter(r=>current.current.data.liveReminders[r.id]===r.reminder)
+       const finished=recent.filter(r=>r.status==='live'||r.status==='ended')
+       const moved=recent.flatMap(r=>{
+         const at=Date.parse(r.start??'')
+         return r.status==='waiting'&&Number.isFinite(at)&&at!==r.reminder.at?[{...r,at}]:[]
+       })
+       if(!finished.length&&!moved.length)return
+       setAlerts(list=>[...list,...finished.filter(r=>r.status==='live'&&!list.some(a=>a.id===r.id)).map(r=>({id:r.id,title:r.reminder.title}))].slice(-8))
        current.current.change(d=>{
          const liveReminders={...d.liveReminders}
-         recent.forEach(r=>delete liveReminders[r.id])
+         finished.forEach(r=>{if(liveReminders[r.id]===r.reminder)delete liveReminders[r.id]})
+         moved.forEach(r=>{if(liveReminders[r.id]===r.reminder)liveReminders[r.id]={...r.reminder,at:r.at}})
          return {...d,liveReminders}
        })
      }finally{running=false}
@@ -61,9 +74,16 @@ export function useLiveReminders(data:Library,change:(fn:(d:Library)=>Library)=>
  return {alerts,dismiss:(id:string)=>setAlerts(a=>a.filter(item=>item.id!==id))}
 }
 
+export function reminderVideos(data:Library):Video[]{
+ return Object.entries(data.liveReminders).map(([id,reminder])=>({
+   ...linkVideo(id),...data.savedVideos[id],title:reminder.title,scheduledAt:reminder.at,live:false,
+   image:data.savedVideos[id]?.image||'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg',
+ })).sort((a,b)=>a.scheduledAt-b.scheduledAt)
+}
+
 export function ScheduledDetails({video,data,change,status='waiting'}:{video:Video;data:Library;change:(fn:(d:Library)=>Library)=>void;status?:LiveStatus}){
  const [now,setNow]=useState(Date.now)
- const at=video.scheduledAt
+ const at=data.liveReminders[video.id]?.at??video.scheduledAt
  useEffect(()=>{if(!at||status!=='waiting')return;const timer=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(timer)},[at,status])
  if(!at||status!=='waiting')return null
  const seconds=Math.ceil(Math.max(0,at-now)/1000),d=Math.floor(seconds/86400),h=Math.floor(seconds/3600)%24,m=Math.floor(seconds/60)%60,s=seconds%60
@@ -75,7 +95,7 @@ export function ScheduledDetails({video,data,change,status='waiting'}:{video:Vid
      const liveReminders={...d.liveReminders}
      if(liveReminders[video.id])delete liveReminders[video.id]
      else liveReminders[video.id]={title:video.title.slice(0,400),at}
-     return {...d,liveReminders}
+     return {...(liveReminders[video.id]?rememberVideo(d,video):d),liveReminders}
    })
  }
  return <div className="schedule-details">

@@ -1,34 +1,91 @@
 import {useEffect,useRef,useState} from 'react'
 import {requestCatalog,type CatalogPage} from './catalog'
-import {type Video,errorText} from './domain'
+import {type Video} from './domain'
 import {mixLive} from './live-mix'
+
 export const liveTopics=[['Gaming','gaming'],['Music','music concert'],['News','news'],['Travel & IRL','walking tour travel'],['Nature','wildlife nature'],['Sports','sports'],['Food','cooking'],['Chat & podcasts','podcast talk'],['Space','space telescope'],['Art & study','drawing study'],['Technology','technology coding'],['Animals','animals aquarium'],['Fitness','fitness workout'],['Events','events festival'],['Learning','education lecture'],['International','international world']] as const
-const cache=new Map<string,{items:Video[];at:number}>()
-type Source={topic:string;query:string;next:CatalogPage['next'];loaded:boolean}
-export function useLiveBrowse(mode:'live'|'scheduled',category:string){
- const key=mode+':'+category,[state,setState]=useState<{key:string;items:Video[];busy:boolean;error:string}>({key,items:cache.get(key)?.items??[],busy:true,error:''}),[revision,setRevision]=useState(0)
- const generation=useRef(0),sources=useRef<Source[]>([]),working=useRef(false),offset=useRef(0),empty=useRef(0),round=useRef(0)
- const mix=(items:Video[])=>mixLive(items,mode,category)
- async function load(source:Source,force=false){let page=await requestCatalog(source.query,mode,source.next,force);for(let i=0;!page.items.length&&page.next&&i<2;i++)page=await requestCatalog(source.query,mode,page.next);return page}
+type Mode='live'|'scheduled'
+type Source={topic:string;query:string;next:CatalogPage['next'];loaded:boolean;head:Video[];tail:Video[];tailAt:number}
+
+function makeSources(mode:Mode,category:string):Source[]{
+ const topics=category?liveTopics.filter(([name])=>name===category):liveTopics
+ const variants=mode==='scheduled'?['upcoming live','live event scheduled','livestream premiere']:['live stream','live now','livestream']
+ return variants.flatMap((suffix,index)=>topics.map(([topic,query])=>({
+   topic,
+   query:mode==='scheduled'&&topic==='Gaming'&&index===0?'vtuber upcoming live':query+' '+suffix,
+   loaded:false,next:null,head:[],tail:[],tailAt:0,
+ })))
+}
+
+type View={key:string;items:Video[];busy:boolean;hasMore:boolean;error:string}
+export function useLiveBrowse(mode:Mode,category:string){
+ const key=mode+':'+category
+ const [view,setView]=useState<View>({key,items:[],busy:true,hasMore:true,error:''})
+ const actions=useRef({more:()=>{},refresh:()=>{}})
  useEffect(()=>{
-  const run=++generation.current;working.current=false;offset.current=0;empty.current=0;round.current=0
-  const picked=category?liveTopics.filter(t=>t[0]===category):liveTopics
-  const upcoming:Record<string,string>={'Gaming':'vtuber upcoming live','Music':'music upcoming live','News':'upcoming press conference live','Chat & podcasts':'hololive upcoming live chat','Space':'NASA upcoming live launch','Art & study':'study upcoming live'}
-  const list:Source[]=picked.map(([topic,query])=>({topic,query:mode==='scheduled'?(upcoming[topic]??query+' upcoming live'):query+' live stream',next:null,loaded:false}));sources.current=list
-  setState({key,items:cache.get(key)?.items??[],busy:true,error:''})
-  const pool:Video[]=[],initial=list.slice(0,category?1:8);let pending=initial.length,success=0
-  for(const source of initial){source.loaded=true;void load(source,revision>0).then(page=>{if(run!==generation.current)return;success++;source.next=page.next;pool.push(...page.items.map(v=>({...v,category:source.topic})));const items=mix(pool);cache.set(key,{items,at:Date.now()});setState({key,items,busy:pending>1,error:''})},e=>{if(run===generation.current&&!success)setState(s=>({...s,error:errorText(e)}))}).finally(()=>{pending--;if(!pending&&run===generation.current)setState(s=>({...s,busy:false,error:success?'':s.error}))})}
-  return()=>{generation.current++}
- },[key,revision])
- async function more(){
-  if(working.current||state.busy)return
-  if(state.error)empty.current=0
-  working.current=true;const run=generation.current
-  let source=sources.current.find(s=>!s.loaded)
-  if(!source){const available=sources.current.filter(s=>s.next);source=available[offset.current++%Math.max(1,available.length)]}
-  if(!source){const picked=category?liveTopics.filter(t=>t[0]===category):liveTopics,index=round.current++,[topic,query]=picked[index%picked.length];source={topic,query:query+(mode==='scheduled'?' upcoming live':[' live now',' livestream',' streaming now'][Math.floor(index/picked.length)%3]),next:null,loaded:false};sources.current.push(source)}
-  source.loaded=true;setState(s=>({...s,busy:true,error:''}))
-  try{const page=await load(source);if(run!==generation.current)return;source.next=page.next;setState(s=>{const items=mix([...s.items,...page.items.map(v=>({...v,category:source!.topic}))]);cache.set(key,{items,at:Date.now()});empty.current=items.length>s.items.length?0:empty.current+1;return {...s,items,busy:false,error:empty.current>=3?'No more results from these sources yet. Try another category or search.':''}})}catch(e){if(run===generation.current)setState(s=>({...s,busy:false,error:errorText(e)}))}finally{if(run===generation.current)working.current=false}
- }
- return {items:state.key===key?state.items:[],busy:state.key!==key||state.busy,error:state.key===key?state.error:'',more,hasMore:state.key===key&&state.items.length>0&&(sources.current.some(s=>!s.loaded||s.next)||empty.current<3),refresh:()=>setRevision(n=>n+1)}
+   const sources=makeSources(mode,category)
+   let active=true,working=false,refreshIndex=0,moreIndex=0
+   const items=()=>mixLive(sources.flatMap(s=>[...s.head,...(Date.now()-s.tailAt<180_000?s.tail:[])]),mode,category)
+   const available=()=>sources.some(s=>!s.loaded||s.next)
+   const render=(busy:boolean,error='')=>{
+     if(active)setView({key,items:items(),busy,hasMore:available(),error})
+   }
+   async function load(source:Source,fresh:boolean){
+     const cursor=fresh?null:source.next
+     const page=await requestCatalog(source.query,mode,cursor,fresh)
+     if(!active)return
+     const rows=page.items.map(v=>({...v,category:source.topic}))
+     if(cursor){
+       if(Date.now()-source.tailAt>=180_000)source.tail=[]
+       source.tail.push(...rows)
+       source.tailAt=Date.now()
+       source.next=page.next?.token!==cursor.token?page.next:null
+     }else{
+       source.head=rows
+       if(!source.loaded)source.next=page.next
+     }
+     source.loaded=true
+   }
+   async function batch(list:Source[],fresh:boolean){
+     const results=await Promise.allSettled(list.map(source=>load(source,fresh)))
+     for(let i=0;i<list.length;i++){
+       if(results[i].status==='rejected'&&!fresh)list[i].loaded=true
+       if(results[i].status==='rejected'&&!fresh)list[i].next=null
+     }
+     return results.some(r=>r.status==='fulfilled')
+   }
+   async function more(){
+     if(!active||working||!available())return
+     working=true;render(true)
+     try{
+       const untouched=sources.filter(s=>!s.loaded)
+       const continuations=sources.filter(s=>s.next)
+       const start=moreIndex++%Math.max(1,continuations.length)
+       const next=[...untouched.slice(0,3),...continuations.slice(start).concat(continuations.slice(0,start)).slice(0,1)]
+       await batch(next,false)
+     }finally{working=false;render(false)}
+   }
+   async function refresh(initial=false){
+     if(!active||working)return
+     working=true
+     if(initial)render(true)
+     try{
+       const loaded=sources.filter(s=>s.loaded)
+       const candidates=loaded.length?loaded:sources
+       const start=refreshIndex%candidates.length,size=initial?(category?3:8):4
+       const group=candidates.slice(start).concat(candidates.slice(0,start)).slice(0,size)
+       refreshIndex+=group.length
+       const worked=await batch(group,true)
+       render(false,!worked&&!items().length?'Could not refresh streams. Try again in a moment.':'')
+     }finally{working=false}
+   }
+   actions.current={more:()=>void more(),refresh:()=>void refresh()}
+   void refresh(true)
+   const timer=setInterval(()=>{if(!document.hidden)void refresh()},30_000)
+   const focus=()=>void refresh()
+   window.addEventListener('focus',focus)
+   return ()=>{active=false;clearInterval(timer);window.removeEventListener('focus',focus)}
+ },[key,mode,category])
+ const current=view.key===key?view:{items:[],busy:true,hasMore:true,error:''}
+ return {...current,more:()=>actions.current.more(),refresh:()=>actions.current.refresh()}
 }

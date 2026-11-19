@@ -175,7 +175,7 @@ function App() {
  return <div className={'app '+(s.collapsed?'collapsed ':'')+(s.density==='compact'?'compact':'')}>
  {notice&&<div className="viddy-toast" role="status" key={notice}><span aria-hidden="true">✦</span>{notice}</div>}<BrandIntro enabled={ready&&s.intro}/><header className="top" data-tauri-drag-region><div className="header-brand" data-tauri-drag-region>{true&&<button className="icon top-menu" aria-label={s.collapsed?'Expand sidebar':'Collapse sidebar'} aria-expanded={!s.collapsed} disabled={!ready} onClick={()=>setting('collapsed',!s.collapsed)}><Menu size={23}/></button>}<button className="brand" aria-label="Viddy Home" onClick={()=>go({name:'home'})}><BrandLockup/></button></div>
  <div className="header-center" data-tauri-drag-region>{ <SearchBar inputRef={searchRef} ready={ready} text={text} setText={setText} submit={submit}/>}</div>
- <div className="header-actions">{route.name!=='watch'&&<button className={watchRoom.room?'icon room-active':'icon'} title="Watch Together" aria-label="Watch Together" onClick={openRoom}><Users size={19}/></button>}{true&&<>
+ <div className="header-actions">{true&&<>
  <button className="icon theme" aria-label={'Switch to '+(s.theme==='dark'?'light':'dark')+' theme'} disabled={!ready} onClick={()=>setting('theme',s.theme==='dark'?'light':'dark')}>{s.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button>
  {updates.release&&<button className="button accent" onClick={()=>go({name:'settings'})}>Update available</button>}
 </>}

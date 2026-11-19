@@ -544,7 +544,7 @@ fn search_items(sections: &[Value], filter: &str) -> Vec<Value> {
 }
 
 #[tauri::command]
-pub async fn live_status(state: State<'_, AppData>, id: String) -> Result<&'static str> {
+pub async fn live_status(state: State<'_, AppData>, id: String, details: Option<bool>) -> Result<Value> {
     if !valid_id(&id, 11) {
         return Err("Invalid video ID.".into());
     }
@@ -554,8 +554,7 @@ pub async fn live_status(state: State<'_, AppData>, id: String) -> Result<&'stat
     let data = embedded_json(&html, "var ytInitialPlayerResponse")?;
     let status = &data["playabilityStatus"]["status"];
     let live = &data["microformat"]["playerMicroformatRenderer"]["liveBroadcastDetails"];
-    Ok(
-        if live["isLiveNow"] == true || data["videoDetails"]["isLive"] == true {
+    let state = if live["isLiveNow"] == true || data["videoDetails"]["isLive"] == true {
             "live"
         } else if live["endTimestamp"].is_string() {
             "ended"
@@ -563,8 +562,12 @@ pub async fn live_status(state: State<'_, AppData>, id: String) -> Result<&'stat
             "waiting"
         } else {
             "unknown"
-        },
-    )
+        };
+    Ok(if details == Some(true) {
+        json!({"status":state,"start":live["startTimestamp"].as_str()})
+    } else {
+        json!(state)
+    })
 }
 
 pub(crate) fn client_version(html: &str) -> &str {

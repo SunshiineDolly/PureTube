@@ -1,4 +1,4 @@
-import {LiveBrowser} from './live-browser'
+import {LiveBrowser,ScheduledReminders} from './live-browser'
 import {useEffect,useRef,useState} from 'react'
 import {AutoMore,Empty,Loading} from './components'
 import {RecentFeed} from './discover'
@@ -34,7 +34,7 @@ export function SearchPage({query,shared,liveOnly=false,selectedSource,onSourceC
    </form></>:<div className="row wrap search-banner" aria-label="Search source">
      {filters.map(([key,label])=><button key={key} className="category-chip" aria-pressed={source===key} onClick={()=>onSourceChange?.(key)}>{label}</button>)}
    </div>}
-   {source==='feeds'?<RecentFeed shared={shared} query={query}/>:
+   {liveOnly&&mode==='scheduled'&&<ScheduledReminders shared={shared}/>}{source==='feeds'?<RecentFeed shared={shared} query={query}/>:
     catalog.error?<><Notice text={catalog.error}/><button className="button" onClick={catalog.reload}>Try again</button></>:
     !matches?<Loading/>:<section className="studio-shelf" aria-label="Matching videos">
     {matches.length?<Grid shared={shared} items={matches} extra={source==='scheduled'?v=><ScheduledDetails video={v} data={shared.data} change={shared.change}/>:undefined}/>:!catalog.hasMore?<Empty title={source==='live'?'No live streams found':source==='scheduled'?'No scheduled streams found':'No matching videos'} detail="Try a different search or a different filter."/>:null}
