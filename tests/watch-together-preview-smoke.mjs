@@ -68,6 +68,65 @@ try{
     assert.ok(publicSchedule.filter(count=>typeof count==='number'&&count>0).length>=2,
       'Expected dated upcoming broadcasts on multiple public creator pages: '+JSON.stringify(publicSchedule))
     console.log('Upcoming broadcasts found on public creator pages: '+JSON.stringify(publicSchedule))
+  }else if(process.env.VIDDY_CHECK_FRIENDS==='1'){
+    const creators=await evaluate("window.__TAURI_INTERNALS__.invoke('search_creators',{query:'DashieGames'})")
+    assert.ok(creators.some(creator=>creator.name.toLowerCase()==='dashiegames'),'The creator search should return DashieGames')
+    await evaluate(`document.querySelector('.sidebar [aria-label="Profile & friends"]').click()`)
+    await evaluate(`(()=>{
+      document.querySelector('.friend-connect summary').click()
+      document.querySelector('.friend-connect button.accent').click()
+    })()`)
+    let invite
+    for(let i=0;i<50&&!invite;i++){
+      invite=await evaluate("document.querySelector('.friend-connect input[readonly]')?.value")
+      if(!invite)await wait(200)
+    }
+    assert.ok(invite?.startsWith('viddy-friend:'),'Friends should create an invite')
+    const source=stripTypeScriptTypes(readFileSync('src/room-connection.ts','utf8')).replace(/^export /gm,'')
+    const answer=await evaluate(`(async()=>{
+      ${source}
+      const offer=decodeRoomCode(${JSON.stringify('viddy-room:'+invite.slice('viddy-friend:'.length))},'offer')
+      const peer=createConnection()
+      window.testFriend={peer}
+      const profile=JSON.stringify({name:'Test friend',bio:'',pins:[],playlists:[]})
+      const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify'])
+      const encode=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes)))
+      const key=encode(await crypto.subtle.exportKey('spki',pair.publicKey))
+      const signature=encode(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},pair.privateKey,new TextEncoder().encode(offer.id+'\\n'+profile)))
+      peer.ondatachannel=({channel})=>{
+        channel.onopen=()=>{
+          channel.send(JSON.stringify({type:'profile',key,signature,profile}))
+          channel.send(JSON.stringify({type:'message',id:'11111111-1111-4111-8111-111111111111',text:'Shared live',video:{id:'aqz-KE-bpKQ',title:'Test broadcast',live:true}}))
+        }
+        channel.onmessage=event=>{const packet=JSON.parse(event.data);if(packet.type==='message')window.testFriend.received=packet.text}
+      }
+      await peer.setRemoteDescription(offer)
+      return await makeRoomCode(peer,offer.id,'answer')
+    })()`)
+    const reply='viddy-friend:'+answer.slice('viddy-room:'.length)
+    const fill=(selector,value)=>evaluate(`(()=>{
+      const input=document.querySelector(${JSON.stringify(selector)})
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)})
+      input.dispatchEvent(new Event('input',{bubbles:true}))
+    })()`)
+    await fill('[aria-label="Friend reply code"]',reply)
+    await evaluate("document.querySelector('.friend-connect form').requestSubmit()")
+    for(let i=0;i<60;i++){
+      if(await evaluate("!!document.querySelector('.friend-entry')"))break
+      if(i===59)throw Error('The friend did not connect')
+      await wait(200)
+    }
+    await evaluate("document.querySelector('.friend-entry').click()")
+    await evaluate("[...document.querySelectorAll('.friends-toolbar button')].find(b=>b.textContent==='Messages').click()")
+    assert.ok(await evaluate("document.querySelector('.friend-messages').textContent.includes('Test broadcast')"),'The incoming live attachment should appear')
+    await fill('[aria-label="Message"]','Hi from Viddy')
+    await evaluate("document.querySelector('.friend-compose').requestSubmit()")
+    for(let i=0;i<30;i++){
+      if(await evaluate("window.testFriend.received==='Hi from Viddy'"))break
+      if(i===29)throw Error('The peer did not receive the reply')
+      await wait(150)
+    }
+    console.log('Creator lookup, authenticated friend profile, incoming live attachment, and outgoing direct message passed.')
   }else{
   // Evaluate the same room code used by the app, with two independent WebRTC peers.
   const code=stripTypeScriptTypes(readFileSync('src/room-connection.ts','utf8')).replace(/^export /gm,'')

@@ -17,8 +17,14 @@ export function isShorts(title:string, description:string, duration:number) {
     || (duration > 0 && duration <= 180 && /(?:^|\s)#(?:youtubeshorts|shorts)\b/i.test(description))
 }
 export function visible(v:Video, f:Filters) {
-  const haystack = (v.title+' '+v.description).normalize('NFKC').toLowerCase()
-  return !v.shorts && !v.paid && !f.blocked.includes(v.channelId) && !f.keywords.some(k => k.trim() && haystack.includes(k.trim().normalize('NFKC').toLowerCase()))
+  const normalize=(text:string)=>text.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim()
+  const title=normalize(v.title),description=normalize(v.description)
+  return !v.shorts&&!v.paid&&!f.blocked.includes(v.channelId)
+    &&!v.creators?.some(creator=>f.blocked.includes(creator.id))
+    &&!f.keywords.some(keyword=>{
+      const term=normalize(keyword)
+      return term&&(title.includes(term)||description.includes(term))
+    })
 }
 export const newest = (a:Video,b:Video) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id)
 const ageUnits:Record<string,number>={s:1,sec:1,second:1,m:60,min:60,minute:60,h:3600,hr:3600,hour:3600,d:86400,day:86400,w:604800,wk:604800,week:604800,mo:2592000,month:2592000,y:31536000,yr:31536000,year:31536000}

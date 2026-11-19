@@ -219,6 +219,7 @@ fn main() {
         public_feed,
         open_info,
         youtube_search::search_youtube,
+        youtube_search::search_creators,
         youtube_search::scheduled_channel,
         youtube_search::channel_videos,
         youtube_search::channel_profile,

@@ -1,3 +1,5 @@
+import {type Filters} from './domain'
+import {useFilteredVideos} from './filtered-videos'
 import {useEffect,useState,useRef} from 'react'
 import {Play,X,ListPlus,Check} from 'lucide-react'
 import {invoke} from '@tauri-apps/api/core'
@@ -52,9 +54,10 @@ export function useUpNext(current:Video,data:Library,followed:Video[]=[],played:
  const positions=new Map(order.current.map((id,i)=>[id,i]));if(order.current.length){for(const v of ranked)if(!positions.has(v.id)){positions.set(v.id,order.current.length);order.current.push(v.id)}ranked.sort((a,b)=>positions.get(a.id)!-positions.get(b.id)!)}
  return {videos:ranked,more,busy,error,pages}
 }
-export function UpNext({videos,autoplay,ended,onToggle,onWatch,onQueue,queued=[],onMore,busy=false,error='',queueActive=false,pages=0}:{pages?:number;queueActive?:boolean;queued?:string[];onQueue?:(v:Video)=>void;onMore?:()=>Promise<void>;busy?:boolean;error?:string;videos:Video[];autoplay:boolean;ended:boolean;onToggle:()=>void;onWatch:(v:Video)=>void}){
+export function UpNext({videos:items,filters,autoplay,ended,onToggle,onWatch,onQueue,queued=[],onMore,busy=false,error='',queueActive=false,pages=0}:{pages?:number;queueActive?:boolean;queued?:string[];onQueue?:(v:Video)=>void;onMore?:()=>Promise<void>;busy?:boolean;error?:string;videos:Video[];filters?:Filters;autoplay:boolean;ended:boolean;onToggle:()=>void;onWatch:(v:Video)=>void}){
  const [limit,setLimit]=useState(8)
  const [cancelled,setCancelled]=useState(false),[seconds,setSeconds]=useState(8)
+ const videos=useFilteredVideos(items,filters??{keywords:[],blocked:[]})
  const next=videos[0]
  useEffect(()=>{setSeconds(8);setCancelled(false)},[ended,next?.id,autoplay])
  useEffect(()=>{

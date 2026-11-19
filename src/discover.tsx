@@ -13,6 +13,7 @@ import type {Surface} from './recommendations'
 import {CategoryRail} from './category-rail'
 import {RandomWatch} from './random-watch-button'
 import {Thumbnail} from './thumbnail'
+import {useFilteredVideos} from './filtered-videos'
 
 export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surface}){
  const {feed,target,refresh,more,hasMore}=useRecommendations(surface,shared.data)
@@ -67,9 +68,10 @@ function TopicCatalog({topic,shared,exclude,surface="discover"}:{topic:string;sh
  const skipped=new Set(exclude)
  const homeIds=recommendationIds('home')
  const videos=catalog.items?.filter(v=>!homeIds.has(v.id)&&!skipped.has(v.channelId)&&!shared.data.dismissed.includes(v.id)&&visible(v,shared.data.settings)).sort(publicNewest).map(v=>({...v,category:topic}))
- const lead=videos?.[0]
+ const checked=useFilteredVideos(videos??[],shared.data.settings)
+ const lead=checked[0]
  return <section className="studio-shelf topic-catalog" aria-label={`${topic} videos`}>
-   <div className="row recommendation-toolbar"><RandomWatch items={videos??[]} shared={shared} surface={surface}/></div>
+   <div className="row recommendation-toolbar"><RandomWatch items={checked} shared={shared} surface={surface}/></div>
    {catalog.error?<><Notice text={catalog.error}/><button className="button" onClick={catalog.reload}>Try again</button></>:
     !videos?<Loading/>:lead?<><article className="topic-feature">
        <Thumbnail key={lead.id} video={lead} onWatch={shared.watch}/>
@@ -79,7 +81,7 @@ function TopicCatalog({topic,shared,exclude,surface="discover"}:{topic:string;sh
          <button className="button accent" onClick={()=>shared.watch(lead)}><Play size={15}/> Watch now</button>
        </div>
      </article>
-     {videos.length>1&&<><div className="starter-heading"><h2>More in {topic}</h2><span className="meta">Newest first</span></div><Grid shared={shared} items={videos.slice(1)}/></>}</>:!catalog.hasMore?<Empty title="No additional results" detail="Try another topic or search for something more specific."/>:null}
+     {checked.length>1&&<><div className="starter-heading"><h2>More in {topic}</h2><span className="meta">Newest first</span></div><Grid shared={shared} items={checked.slice(1)}/></>}</>:!catalog.hasMore?<Empty title="No additional results" detail="Try another topic or search for something more specific."/>:null}
    <AutoMore enabled={catalog.hasMore} busy={catalog.loadingMore} error={catalog.moreError} onReach={catalog.more}/>
  </section>
 }

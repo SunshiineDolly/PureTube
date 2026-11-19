@@ -719,6 +719,34 @@ async fn continue_rows(
 }
 
 #[tauri::command]
+pub async fn search_creators(state: State<'_, AppData>, query: String) -> Result<Vec<Value>> {
+    let mut url = search_url(&query, "all")?;
+    url.query_pairs_mut().append_pair("sp", "EgIQAg==");
+    let data = initial_data(&public_page(&state.client, url).await?)?;
+    let mut found = Vec::new();
+    fn collect(node: &Value, depth: u8, found: &mut Vec<Value>) {
+        if depth == 0 || found.len() >= 25 { return; }
+        if let Some(card) = node.get("channelRenderer").or_else(|| node.get("compactChannelRenderer")) {
+            if let Some(id) = channel_key(&card["channelId"]) {
+                let title = text(&card["title"]);
+                if !title.is_empty() && !found.iter().any(|v| v["id"] == id) {
+                    found.push(json!({"id":id,"name":title,"handle":text(&card["subscriberCountText"]),
+                        "image":avatar(&card["thumbnail"]["thumbnails"][0]["url"])}));
+                }
+            }
+            return;
+        }
+        match node {
+            Value::Array(rows) => rows.iter().for_each(|row| collect(row, depth - 1, found)),
+            Value::Object(fields) => fields.values().for_each(|row| collect(row, depth - 1, found)),
+            _ => (),
+        }
+    }
+    collect(&data["contents"], 16, &mut found);
+    Ok(found)
+}
+
+#[tauri::command]
 pub async fn search_youtube(
     state: State<'_, AppData>,
     query: String,

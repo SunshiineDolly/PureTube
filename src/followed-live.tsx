@@ -1,3 +1,4 @@
+import {useFilteredVideos} from './filtered-videos'
 import {useEffect,useRef,useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
 import {Radio,RefreshCw} from 'lucide-react'
@@ -42,8 +43,8 @@ export function useFollowedLive(ids:string[]){
 export type FollowedLive=ReturnType<typeof useFollowedLive>
 
 export function FollowedLiveShelf({shared}:{shared:Shared}){
- const streams=Object.values(shared.live.states).flatMap(check=>check.video&&!check.error?[check.video]:[])
-   .filter(v=>visible(v,shared.data.settings))
+ const streams=useFilteredVideos(Object.values(shared.live.states).flatMap(check=>check.video&&!check.error?[check.video]:[]),shared.data.settings)
+
  if(!streams.length)return null
  return <section className="followed-live" aria-label="Live from your follows">
    <div className="starter-heading"><h2><Radio size={18}/> Live from your follows <span>{streams.length}</span></h2>

@@ -13,11 +13,13 @@ import {CreatorAvatar} from './creator-avatar'
 import {invoke} from '@tauri-apps/api/core'
 import {FollowedLiveShelf,useFollowedLive,type FollowedLive} from './followed-live'
 import {RandomWatch} from './random-watch-button'
+import {useFilteredVideos} from './filtered-videos'
 
-export type Shared = {data:Library;change:(fn:(d:Library)=>Library)=>void;playNext:(v:Video)=>void;enqueue:(v:Video)=>void;playPlaylist:(name:string,ids:string[],index?:number)=>void;watch:(v:Video)=>void;channel:(id:string)=>void;follow:(id:string)=>void;subscriptions:()=>void;discover:()=>void;feeds:PublicFeeds;followIds:string[];live:FollowedLive}
+export type Shared = {data:Library;change:(fn:(d:Library)=>Library)=>void;playNext:(v:Video)=>void;enqueue:(v:Video)=>void;playPlaylist:(name:string,ids:string[],index?:number,first?:Video)=>void;watch:(v:Video)=>void;channel:(id:string)=>void;follow:(id:string)=>void;subscriptions:()=>void;discover:()=>void;feeds:PublicFeeds;followIds:string[];live:FollowedLive}
 export function Grid({shared,items,isNew=false,extra}:{shared:Shared;items:Video[];isNew?:boolean;extra?:(v:Video)=>React.ReactNode}) {
  const {data,change,watch,channel}=shared
- return <VideoGrid onQueue={shared.enqueue} items={items.filter(v=>visible(v,data.settings))} extra={extra} onWatch={watch} onChannel={channel} progress={data.settings.progress?data.progress:undefined} later={data.later} checked={isNew?data.checked:undefined} onSave={id=>change(d=>{const video=items.find(v=>v.id===id);return {...(video?rememberVideo(d,video):d),later:toggled(d.later,id)}})}/>
+ const matches=useFilteredVideos(items,data.settings)
+ return <VideoGrid onQueue={shared.enqueue} items={matches} extra={extra} onWatch={watch} onChannel={channel} progress={data.settings.progress?data.progress:undefined} later={data.later} checked={isNew?data.checked:undefined} onSave={id=>change(d=>{const video=matches.find(v=>v.id===id);return {...(video?rememberVideo(d,video):d),later:toggled(d.later,id)}})}/>
 }
 export function Heading({label,title,detail,children}:{label:string;title:string;detail:string;children?:React.ReactNode}) {
  return <div className="heading"><div>{label&&<p className="eyebrow">{label}</p>}<h1>{title}</h1>{detail&&<p>{detail}</p>}</div>{children&&<div className="heading-actions">{children}</div>}</div>

@@ -1,20 +1,16 @@
 import {useEffect,useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
-import {Palette,SlidersHorizontal,Shield,Monitor,Download,Upload,Trash2,PlaySquare,RefreshCw} from 'lucide-react'
+import {Palette,Shield,Monitor,Download,Upload,Trash2,PlaySquare,RefreshCw} from 'lucide-react'
 import {errorText} from './domain'
-import {parseChannel} from './public-feeds'
+import {ContentFilters} from './content-filters'
 import {decode,empty,type Library,type Settings} from './library'
 import type {AppUpdates} from './updates'
 import {accents,palettes,paletteStyle} from './palettes'
 import {resetRecommendationMemory} from './use-recommendations'
 type SetSetting=<K extends keyof Settings>(key:K,value:Settings[K])=>void
 function Toggle({label,value,onChange}:{label:string;value:boolean;onChange:(v:boolean)=>void}) {return <label className="toggle"><span>{label}</span><input type="checkbox" checked={value} onChange={e=>onChange(e.target.checked)}/></label>}
-function TextList({label,values,onChange}:{label:string;values:string[];onChange:(v:string[])=>void}) {
- const [text,setText]=useState('')
- return <div className="setting-stack"><form className="row" onSubmit={e=>{e.preventDefault();const v=text.trim();if(v&&!values.includes(v)){onChange([...values,v]);setText('')}}}><input aria-label={label} placeholder={label} maxLength={256} value={text} onChange={e=>setText(e.target.value)}/><button className="button" disabled={!text.trim()}>Add</button></form><div className="chips">{values.map(v=><button className="chip" key={v} aria-label={'Remove '+v} onClick={()=>onChange(values.filter(x=>x!==v))}>{v} &times;</button>)}</div></div>
-}
 export function Preferences({data,setting,change,updates}:{data:Library;setting:SetSetting;change:(fn:(d:Library)=>Library)=>void;updates:AppUpdates}) {
- const s=data.settings,[message,setMessage]=useState(''),[autostart,setAutostart]=useState(false),[blocked,setBlocked]=useState(''),[busy,setBusy]=useState(false)
+ const s=data.settings,[message,setMessage]=useState(''),[autostart,setAutostart]=useState(false),[busy,setBusy]=useState(false)
  useEffect(()=>{invoke<boolean>('startup',{enabled:null}).then(setAutostart).catch(e=>setMessage(errorText(e)))},[])
  async function action(fn:()=>Promise<void>) {setBusy(true);setMessage('');try{await fn()}catch(e){setMessage(errorText(e))}finally{setBusy(false)}}
  const toggle=(k:'collapsed'|'history'|'progress'|'showTime'|'tray'|'closeToTray'|'autoplay'|'intro'|'themedCursor',label:string)=><Toggle label={label} value={s[k]} onChange={v=>setting(k,v)}/>
@@ -23,12 +19,7 @@ export function Preferences({data,setting,change,updates}:{data:Library;setting:
  <section><h2><Palette/> Appearance</h2><label>Theme <select value={s.theme} onChange={e=>setting('theme',e.target.value as Settings['theme'])}><option value="dark">Dark</option><option value="light">Light</option></select></label>
  <div className="palette-options" role="group" aria-label="Color palette">{accents.map(accent=><button key={accent} type="button" className="palette-option" data-theme={s.theme} data-accent={accent} style={paletteStyle(s.theme,accent)} aria-pressed={s.accent===accent} onClick={()=>setting('accent',accent)}><span className="palette-preview" aria-hidden="true"><i/><i/><i/></span>{palettes[s.theme][accent]}</button>)}</div>
  <label>Thumbnail density <select value={s.density} onChange={e=>setting('density',e.target.value as Settings['density'])}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>{toggle('collapsed','Collapse sidebar')}{toggle('themedCursor','Use Viddy’s themed cursor')}{toggle('intro','Play the Viddy intro on launch')}<button className="button" disabled={!s.intro} onClick={()=>window.dispatchEvent(new Event('viddy-intro'))}>Preview intro</button></section>
- <section><h2><SlidersHorizontal/> Content filters</h2>
- <p>Blocked phrases match titles and descriptions, ignoring case.</p>
- <TextList label="Block a word or phrase" values={s.keywords} onChange={v=>setting('keywords',v)}/> <form className="row" onSubmit={e=>{e.preventDefault();void action(async()=>{const id=parseChannel(blocked);if(!id) throw new Error('Enter a valid channel ID or channel link.');setting('blocked',[...new Set([...s.blocked,id])]);setBlocked('')})}}><input aria-label="Channel to block" placeholder="Block a channel by ID or link" value={blocked} onChange={e=>setBlocked(e.target.value)}/><button className="button" disabled={busy||!blocked.trim()}>Block</button></form>
- <div className="chips">{s.blocked.map(id=><button className="chip" key={id} aria-label={'Unblock '+id} onClick={()=>setting('blocked',s.blocked.filter(x=>x!==id))}>{id} &times;</button>)}</div>
- <p>Viddy excludes Shorts that YouTube identifies in its public results, links, or creator tags.</p>
- </section>
+ <ContentFilters settings={s} onKeywords={values=>setting('keywords',values)} onBlocked={values=>setting('blocked',values)}/>
  <section><h2><PlaySquare/> Playback</h2><p>Videos start when selected. Use the player’s controls for playback or fullscreen. YouTube may show ads and related videos inside its player.</p>
  {toggle('autoplay','Autoplay recommendations after a video ends')}{toggle('progress','Track playback progress')}{toggle('showTime','Show viewing time this session')}
  <label>Daily viewing reminder (minutes; 0 disables) <input type="number" min="0" max="1440" value={s.reminder} onChange={e=>setting('reminder',Math.min(1440,Math.max(0,Math.floor(Number(e.target.value)||0))))}/></label>
