@@ -40,7 +40,7 @@ import './studio.css'
 
 type Name='friends'|'home'|'discover'|'following'|'subscriptions'|'library'|'later'|'history'|'settings'|'downloads'
 type Route={name:Name}|{name:'search';query:string;source?:SearchSource}|{name:'live';query?:string;mode?:'live'|'scheduled'}|{name:'channel';id:string;tab?:ChannelTab}|{name:'watch';video:Video}
-const nav = [{id:'home',name:'Home',Icon:House},{id:'discover',name:'Discover',Icon:Compass},{id:'following',name:'Following',Icon:Users},{id:'live',name:'Live',Icon:Radio},{id:'subscriptions',name:'Manage channels',Icon:Users},{id:'library',name:'Library',Icon:Bookmark},{id:'later',name:'Watch Later',Icon:Clock3},{id:'history',name:'History',Icon:History},{id:'friends',name:'Profile & friends',Icon:Users},{id:'settings',name:'Settings',Icon:Gear}] as const
+const nav = [{id:'home',name:'Home',Icon:House},{id:'discover',name:'Discover',Icon:Compass},{id:'following',name:'Following',Icon:Users},{id:'live',name:'Live',Icon:Radio},{id:'subscriptions',name:'Manage channels',Icon:Users},{id:'library',name:'Library',Icon:Bookmark},{id:'later',name:'Watch Later',Icon:Clock3},{id:'history',name:'History',Icon:History},{id:'friends',name:'Community',Icon:Users},{id:'settings',name:'Settings',Icon:Gear}] as const
 const localDate=()=>new Date().toLocaleDateString('en-CA')
 function App() {
  const {data,ready,failed,error,change,setting}=useLibrary(), s=data.settings
@@ -59,7 +59,7 @@ function App() {
  dataRef.current=data
  const updates=useUpdates(ready)
  const profile=useProfile(data)
- const friends=useFriends(profile.profile)
+ const friends=useFriends(profile.profile,profile.receiveWall)
  const [friendAttachment,setFriendAttachment]=useState<SharedVideo>()
  const roomDialog=useRef<HTMLDialogElement>(null)
  const openRoom=()=>roomDialog.current?.showModal()

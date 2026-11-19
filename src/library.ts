@@ -17,7 +17,7 @@ export const empty = ():Library => ({version:1,profileName:'',profileBio:'',prof
 export const profileEmojis=['','🎀','🌷','🍒','🦋','🪷','🌙','🍓','🌿']
 export function rememberVideo(data:Library,video:Video):Library {
  if(!videoId(video.id)||!video.title||video.title==='YouTube video')return data
- const saved={...video,description:video.description.slice(0,1500)}
+ const saved={...video,metadataComplete:video.metadataComplete&&video.description.length<=1500,description:video.description.slice(0,1500)}
  return {...data,savedVideos:Object.fromEntries([[video.id,saved],...Object.entries(data.savedVideos).filter(([id])=>id!==video.id)].slice(0,300))}
 }
 export const profileName=(value:unknown)=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,48):''

@@ -1,7 +1,7 @@
 export const videoId = (s: string) => /^[\w-]{11}$/.test(s)
 export const channelId = (s: string) => /^UC[\w-]{22}$/.test(s)
 export type CreatorCredit={id:string;name:string;image?:string}
-export type Video = {id:string; title:string; description:string; channelId:string; channel:string; channelImage?:string; previewImage?:string; creators?:CreatorCredit[]; date:string; publishedLabel?:string; image:string; duration:number; category?:string; live?:boolean; upcoming?:boolean; scheduledAt?:number|null; views?:string; likes?:string; shorts:boolean; embeddable:boolean; paid:boolean}
+export type Video = {id:string; title:string; description:string; metadataComplete?:boolean; channelId:string; channel:string; channelImage?:string; previewImage?:string; creators?:CreatorCredit[]; date:string; publishedLabel?:string; image:string; duration:number; category?:string; live?:boolean; upcoming?:boolean; scheduledAt?:number|null; views?:string; likes?:string; shorts:boolean; embeddable:boolean; paid:boolean}
 export type Channel = {id:string; title:string; description:string; image:string; banner:string; uploads:string; subscribers?:string}
 export function fillCreator(video:Video,name:string,image?:string):Video {
  const channel=video.channel&&video.channel!=='Creator'?video.channel:name

@@ -19,13 +19,23 @@ export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surfa
  const {feed,target,refresh,more,hasMore}=useRecommendations(surface,shared.data)
  const [topic,setTopic]=useState('All')
  const railTopics=['All','Gaming','Vlogs','Style & beauty','Fashion','Home & lifestyle','Music','Anime','Learning','Travel',...topics.map(t=>t.name).filter(name=>!['Gaming','Vlogs','Style & beauty','Fashion','Home & lifestyle','Music','Anime','Learning','Travel'].includes(name))]
- const videos=feed?.items.filter(v=>!shared.data.dismissed.includes(v.id)&&visible(v,shared.data.settings)&&(!shared.data.settings.history||!shared.data.history[v.id]))
+ const filters=shared.data.settings
+ const reserve=topics.filter((t,i)=>t.ids.length&&i%2===(surface==='home'?0:1)).flatMap(t=>
+   t.ids.slice(0,1).map(id=>({id,category:t.name}))).filter(t=>!filters.blocked.includes(t.id)
+     &&(surface==='home'||!shared.followIds.includes(t.id))).slice(0,6)
+ const feedReserve=usePublicFeeds(filters.keywords.length&&topic==='All'?reserve.map(t=>t.id):[])
+ const alreadyLive=new Set(Object.values(shared.live.states).flatMap(s=>s.video?[s.video.id]:[]))
+ const reserveItems=filters.keywords.length?mixByTopic(reserve.map(({id,category})=>
+   (feedReserve.states[id]?.feed?.videos??[]).filter(v=>v.metadataComplete&&!v.live&&!alreadyLive.has(v.id)).slice(0,8)
+     .map(v=>({...v,category})))):[]
+ const candidates=unique([...(feed?.items??[]),...reserveItems]).filter(v=>!shared.data.dismissed.includes(v.id)&&visible(v,filters)&&(!filters.history||!shared.data.history[v.id]))
+ const videos=useFilteredVideos(candidates,filters)
  return <div className="studio-discover recommendations" ref={target}>
    {surface==='home'&&<div className="heading home-browse-heading"><h1 className="sr-only">Home</h1><CategoryRail names={railTopics} selected={topic} onSelect={setTopic}/><button className="button new-mix-button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16} className={feed?.busy?'spin':undefined}/> New mix</button></div>}
    {surface==='home'&&<FollowedLiveShelf shared={shared}/>}
    <div className="row recommendation-toolbar"><p>{surface==='discover'?'Explore beyond your usual creators.':'A surprise shaped by what you watch.'}</p><div className="recommendation-actions">{topic==='All'&&<RandomWatch items={videos??[]} shared={shared} surface={surface}/>} {surface==='discover'&&<button className="button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16}/> New mix</button>}</div></div>
    {topic==='All'?<>
-   {!videos?.length&&feed?.busy?<Loading/>:videos?.length?<section className="studio-shelf" aria-label="Recommended videos"><Grid shared={shared} items={videos} extra={v=><div className="recommendation-reason"><span>{v.category}</span><button title="Remove this recommendation" onClick={()=>shared.change(d=>({...d,dismissed:[...new Set([...d.dismissed,v.id])].slice(-5000)}))}>Not interested</button></div>}/></section>:feed?.error?<><Notice text={feed.error}/><button className="button" onClick={refresh}>Try again</button></>:<Empty title="Time for something new" detail="Refresh the mix for new topics and creators." action={<button className="button" onClick={refresh}>New mix</button>}/>}
+   {!videos.length&&(feed?.busy||feedReserve.busy)?<Loading/>:videos.length?<section className="studio-shelf" aria-label="Recommended videos"><Grid shared={shared} items={videos} extra={v=><div className="recommendation-reason"><span>{v.category}</span><button title="Remove this recommendation" onClick={()=>shared.change(d=>({...d,dismissed:[...new Set([...d.dismissed,v.id])].slice(-5000)}))}>Not interested</button></div>}/></section>:feed?.error?<><Notice text={feed.error}/><button className="button" onClick={refresh}>Try again</button></>:<Empty title="Time for something new" detail="Refresh the mix for new topics and creators." action={<button className="button" onClick={refresh}>New mix</button>}/>}
    <AutoMore enabled={hasMore} busy={!!feed?.busy} error={feed?.moreError} onReach={()=>void more()}/></>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={[]} surface={surface}/>}
  </div>
 }

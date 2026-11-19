@@ -454,7 +454,7 @@ pub async fn channel_live(state: State<'_, AppData>, id: String) -> Result<Optio
     Ok(Some(
         json!({"id":video_id,"title":title,"channelId":id,"channel":details["author"].as_str().unwrap_or("Creator"),
         "image":format!("https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"),
-        "description":details["shortDescription"].as_str().unwrap_or_default(),
+        "description":details["shortDescription"].as_str().unwrap_or_default(),"metadataComplete":true,
         "live":true,"duration":0,"shorts":false,"paid":false,
         "date":metadata["liveBroadcastDetails"]["startTimestamp"].as_str().unwrap_or_default(),
         "embeddable":data["playabilityStatus"]["playableInEmbed"]!=false}),
@@ -990,7 +990,7 @@ pub(crate) async fn read_page(request: reqwest::RequestBuilder) -> Result<String
         .map_err(|_| "Could not reach YouTube search. Check your connection and try again.")?;
     if !response.status().is_success() {
         return Err(match response.status().as_u16() {
-            429 => "YouTube is limiting searches right now. Try again in a few minutes.",
+            403 | 429 => "YouTube is limiting requests right now. Try again in a few minutes.",
             _ => "YouTube search is temporarily unavailable.",
         }
         .into());

@@ -17,8 +17,8 @@ export function playerApi() {
    document.head.appendChild(script)
  }).catch(e=>{api=undefined;throw e}) as Promise<NonNullable<Window['YT']>>
 }
-export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,volumeControls=false,sampleInterval=8,roomPlayback,onRoomController}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;onVideoChange?:(id:string)=>void;sampleInterval?:number;volumeControls?:boolean;roomPlayback?:RoomPlayback;onRoomController?:(read:()=>RoomPlayback|undefined)=>void}) {
- const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,onRoomController})
+export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onPlaybackError,onVideoChange,volumeControls=false,sampleInterval=8,roomPlayback,onRoomController}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;onPlaybackError?:(code:number)=>void;onVideoChange?:(id:string)=>void;sampleInterval?:number;volumeControls?:boolean;roomPlayback?:RoomPlayback;onRoomController?:(read:()=>RoomPlayback|undefined)=>void}) {
+ const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onPlaybackError,onVideoChange,onRoomController})
  const initial=useRef(start)
  const roomTarget=useRef(roomPlayback)
  roomTarget.current=roomPlayback
@@ -33,7 +33,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
  function toggleMute(){const p=volumePlayer.current;if(!p)return;if(muted||volume===0){if(volume===0){p.setVolume(50);setVolume(50)}p.unMute();setMuted(false)}else{p.mute();setMuted(true)}}
  const [liveState,setLiveState]=useState<'connecting'|'playing'|'paused'|'buffering'|'ended'>('connecting')
  const jump=useRef<()=>void>(()=>{})
- callbacks.current={onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,onRoomController}
+ callbacks.current={onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onPlaybackError,onVideoChange,onRoomController}
  useEffect(()=>{
    const host=mount.current!
    const frame=document.createElement('iframe')
@@ -111,9 +111,9 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
          if(e.data===0 || e.data===2) sample(true)
          if(e.data===0&&!live)callbacks.current.onEnded?.()
        },
-       onError:e=>{if(closed)return;count(false);if([101,150].includes(e.data))callbacks.current.onRestricted?.();setError(e.data===153?'YouTube couldn’t play this video in Viddy. Try another result.':[101,150].includes(e.data)?'The creator has disabled embedded playback.':e.data===100?'This video is unavailable or private.':'YouTube could not play this video here.')}
+       onError:e=>{if(closed)return;count(false);if([101,150].includes(e.data))callbacks.current.onRestricted?.();callbacks.current.onPlaybackError?.(e.data);setError(e.data===153?'YouTube couldn’t play this video in Viddy. Try another result.':[101,150].includes(e.data)?'The creator has disabled embedded playback.':e.data===100?'This video is unavailable or private.':'YouTube could not play this video here.')}
      }})
-   }).catch(e=>{if(!closed) setError(String(e.message??e))})
+   }).catch(e=>{if(!closed){setError(String(e.message??e));callbacks.current.onPlaybackError?.(0)}})
    const flush=()=>{if(played) sample(true)}
    const visibility=()=>{
      if(document.hidden){hiddenAt=Date.now();return}

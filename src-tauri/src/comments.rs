@@ -23,6 +23,11 @@ fn section(value: &Value) -> Option<&Value> {
             return Some(s);
         }
     }
+    if let Some(panel) = value.get("engagementPanelSectionListRenderer") {
+        if panel["targetId"] == "engagement-panel-comments-section" && token(&panel["content"]).is_some() {
+            return Some(&panel["content"]);
+        }
+    }
     match value {
         Value::Object(m) => m.values().find_map(section),
         Value::Array(a) => a.iter().find_map(section),
@@ -49,7 +54,14 @@ async fn next(client: &reqwest::Client, c: &Value, id: &str) -> Result<Value> {
     if c["videoId"] != id {
         return Err("This comment cursor belongs to another video.".into());
     }
-    let body=read_page(client.post("https://www.youtube.com/youtubei/v1/next").header("Origin","https://www.youtube.com").header("Accept","application/json").json(&json!({"context":{"client":{"clientName":"WEB","clientVersion":v,"hl":"en"}},"continuation":t}))).await?;
+    let body = read_page(client.post("https://www.youtube.com/youtubei/v1/next")
+        .header("Origin", "https://www.youtube.com")
+        .header("Referer", format!("https://www.youtube.com/watch?v={id}"))
+        .header("X-YouTube-Client-Name", "1")
+        .header("X-YouTube-Client-Version", v)
+        .header("Accept", "application/json")
+        .json(&json!({"context":{"client":{"clientName":"WEB","clientVersion":v,"hl":"en"}},"continuation":t})))
+        .await.map_err(|_| "YouTube did not return comments. Try again later or open its original comments.")?;
     serde_json::from_str(
         body.trim_start()
             .strip_prefix(")]}'")
@@ -183,19 +195,24 @@ pub async fn video_comments(
         &[("v", id.as_str()), ("hl", "en")],
     )
     .map_err(|_| "Invalid video.")?;
-    let html = public_page(&state.client, url).await?;
-    let data = initial_data(&html)?;
+    let html = public_page(&state.client, url).await
+        .map_err(|_| "YouTube did not return the public watch page. Try opening its original comments.")?;
+    let data = initial_data(&html).map_err(|_| "YouTube did not return readable comments.")?;
     let version = client_version(&html);
     let Some(t) = section(&data).and_then(token) else {
         return Ok(
-            json!({"items":[],"next":null,"sorts":{},"count":"","unavailable":true,"message":"Comments are disabled or unavailable for this video."}),
+            json!({"items":[],"next":null,"sorts":{},"count":"","unavailable":true,"message":"YouTube did not list public comments for this video."}),
         );
     };
     let body = next(&state.client, &self::cursor(t, version, &id), &id).await?;
     let page = parse(&body, version, &id);
     if sort == "newest" {
         if let Some(c) = page["sorts"].get("newest") {
-            let body = next(&state.client, c, &id).await?;
+            let Ok(body) = next(&state.client, c, &id).await else {
+                let mut fallback = page;
+                fallback["message"] = json!("Newest comments could not load. Showing top comments.");
+                return Ok(fallback);
+            };
             let mut sorted = parse(&body, version, &id);
             sorted["sorts"] = page["sorts"].clone();
             sorted["count"] = page["count"].clone();
@@ -207,6 +224,15 @@ pub async fn video_comments(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn finds_the_comments_engagement_panel_continuation() {
+        let watch = json!({"engagementPanels":[
+            {"engagementPanelSectionListRenderer":{"targetId":"engagement-panel-searchable-transcript","content":{"continuationCommand":{"token":"transcript"}}}},
+            {"engagementPanelSectionListRenderer":{"targetId":"engagement-panel-comments-section","content":{"sectionListRenderer":{"contents":[{"continuationItemRenderer":{"continuationEndpoint":{"continuationCommand":{"token":"comments"}}}}]}}}}
+        ]});
+        assert_eq!(section(&watch).and_then(token), Some("comments"));
+    }
+
     #[test]
     fn resolves_entity_comments_and_preserves_thread_continuations() {
         let body = json!({"onResponseReceivedEndpoints":[{"reloadContinuationItemsCommand":{"continuationItems":[{"commentThreadRenderer":{"commentViewModel":{"commentViewModel":{"commentKey":"key","pinnedText":"Pinned"}},"replies":{"commentRepliesRenderer":{"viewReplies":{"buttonRenderer":{"text":{"simpleText":"2 replies"}}},"contents":[{"continuationItemRenderer":{"continuationEndpoint":{"continuationCommand":{"token":"replies"}}}}]}}}},{"continuationItemRenderer":{"continuationEndpoint":{"continuationCommand":{"token":"next-page"}}}}]}}],"frameworkUpdates":{"entityBatchUpdate":{"mutations":[{"payload":{"commentEntityPayload":{"key":"key","properties":{"commentId":"c1","content":{"content":"Hello world"},"publishedTime":"Today"},"author":{"displayName":"Viewer","channelId":"UC123"},"toolbar":{"likeCountNotliked":"12"}}}}]}}});

@@ -4,6 +4,21 @@ import {channelId,errorText,type CreatorCredit,type Video} from './domain'
 
 type WatchCreator=CreatorCredit&{title:string;date:string;live:boolean;upcoming?:boolean;embeddable:boolean;description?:string;views?:string;duration?:number;storyboard?:string;subscribers?:string}
 const lookedUp=new Map<string,{task:Promise<WatchCreator>;expires:number}>()
+let background=Promise.resolve(),pausedUntil=0
+export function verifyVideoMetadata(id:string){
+ const cached=lookedUp.get(id)
+ if(cached&&cached.expires>Date.now())return cached.task
+ const task=background.then(async()=>{
+   if(Date.now()<pausedUntil)throw Error('YouTube is limiting metadata requests. Try again shortly.')
+   try{return await lookupCreator(id)}
+   catch(e){
+     if(/limiting|temporarily unavailable|could not reach/i.test(errorText(e)))pausedUntil=Date.now()+60_000
+     throw e
+   }
+ })
+ background=task.then(()=>{},()=>{}).then(()=>new Promise<void>(resolve=>setTimeout(resolve,425)))
+ return task
+}
 export function lookupCreator(id:string){
  const cached=lookedUp.get(id)
  let task=cached&&cached.expires>Date.now()?cached.task:undefined

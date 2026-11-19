@@ -3,11 +3,15 @@ import {createConnection,decodeRoomCode,makeRoomCode} from './room-connection'
 import {errorText,videoId} from './domain'
 
 export type SharedVideo={id:string;title:string;live?:boolean}
-export type PublicProfile={name:string;bio:string;pins:SharedVideo[];playlists:{name:string;videos:SharedVideo[]}[]}
+export const profileThemes=['Viddy','Rose','Ocean','Forest','Sunset'] as const
+export const profileAvatars=['','✦','☾','♡','❀','♫','☁','⚡'] as const
+export type ActivityPost={id:string;at:number;text:string;video?:SharedVideo}
+export type WallPost=ActivityPost&{author:string;authorId:string}
+export type PublicProfile={name:string;bio:string;pins:SharedVideo[];playlists:{name:string;videos:SharedVideo[]}[];theme?:typeof profileThemes[number];avatar?:typeof profileAvatars[number];activity?:ActivityPost[];wall?:WallPost[];guestbook?:boolean}
 export type Friend=PublicProfile&{id:string}
 export type FriendMessage={id:string;own:boolean;at:number;text:string;video?:SharedVideo}
 type Book={friends:Record<string,Friend>;messages:Record<string,FriendMessage[]>}
-type Member={id:string;peer:RTCPeerConnection;channel?:RTCDataChannel;friend?:string;pending?:Promise<void>}
+type Member={id:string;peer:RTCPeerConnection;channel?:RTCDataChannel;friend?:string;name?:string;pending?:Promise<void>}
 type Signal={member:Member;code:string;kind:'invite'|'reply'}
 const storage='viddy-friends-v1'
 const prefix='viddy-friend:'
@@ -43,18 +47,33 @@ function readProfile(value:unknown):PublicProfile|undefined{
  const p=value as Partial<PublicProfile>
  if(typeof p.name!=='string'||typeof p.bio!=='string'||!Array.isArray(p.pins)||!Array.isArray(p.playlists))return
  const videos=(items:unknown[])=>items.map(readSharedVideo).filter((v):v is SharedVideo=>!!v)
- return {name:p.name.slice(0,48),bio:p.bio.slice(0,250),pins:videos(p.pins.slice(0,6)),playlists:p.playlists.slice(0,8).flatMap(list=>
+ const activity=Array.isArray(p.activity)?p.activity.slice(0,20).flatMap(post=>{const parsed=readPost(post);return parsed?[parsed]:[]}):[]
+ const wall=Array.isArray(p.wall)?p.wall.slice(0,20).flatMap(post=>{
+   const parsed=readPost(post)
+   return parsed&&typeof post?.author==='string'&&typeof post?.authorId==='string'?[{...parsed,author:post.author.slice(0,48),authorId:post.authorId.slice(0,48)}]:[]
+ }):[]
+ return {name:p.name.slice(0,48),bio:p.bio.slice(0,250),theme:profileThemes.find(t=>t===p.theme),avatar:profileAvatars.find(a=>a===p.avatar),
+   activity,wall,guestbook:p.guestbook===true,pins:videos(p.pins.slice(0,6)),playlists:p.playlists.slice(0,8).flatMap(list=>
    list&&typeof list.name==='string'&&Array.isArray(list.videos)?[{name:list.name.slice(0,80),videos:videos(list.videos.slice(0,40))}]:[])}
 }
 
-export function useFriends(profile:PublicProfile){
+function readPost(value:unknown):ActivityPost|undefined{
+ if(!value||typeof value!=='object')return
+ const p=value as Partial<ActivityPost>
+ if(typeof p.id!=='string'||!/^[-a-f0-9]{36}$/i.test(p.id)||typeof p.text!=='string'||typeof p.at!=='number'||!Number.isFinite(p.at)||p.at<0||p.at>Date.now()+300_000)return
+ const text=p.text.trim().slice(0,500),video=readSharedVideo(p.video)
+ if(text||video)return {id:p.id,at:p.at,text,video}
+}
+
+export function useFriends(profile:PublicProfile,onWallPost:(post:WallPost)=>void){
  const [book,setBook]=useState<Book>(()=>{
    try{return JSON.parse(localStorage.getItem(storage)??'null')??{friends:{},messages:{}}}catch{return {friends:{},messages:{}}}
  })
  const [online,setOnline]=useState<string[]>([]),[signal,setSignal]=useState<Signal>()
  const [busy,setBusy]=useState(false),[message,setMessage]=useState('')
- const peers=useRef(new Set<Member>()),published=useRef(profile)
+ const peers=useRef(new Set<Member>()),published=useRef(profile),wallPost=useRef(onWallPost)
  published.current=profile
+ wallPost.current=onWallPost
  const profileVersion=JSON.stringify(profile)
  useEffect(()=>{try{localStorage.setItem(storage,JSON.stringify(book))}catch{}},[book])
  const updateOnline=()=>setOnline([...new Set([...peers.current].flatMap(p=>p.friend&&p.channel?.readyState==='open'?[p.friend]:[]))])
@@ -87,11 +106,15 @@ export function useFriends(profile:PublicProfile){
        const id=encode(await crypto.subtle.digest('SHA-256',pub))
        if(!peers.current.has(p)||(p.friend&&p.friend!==id))return
        p.friend=id
+       p.name=parsed.name
        setBook(old=>({...old,friends:{...old.friends,[id]:{...parsed,id}}}))
        updateOnline();setSignal(old=>old?.member===p?undefined:old);setMessage('')
      }else if(item.type==='message'&&p.friend&&typeof item.id==='string'&&item.id.length===36&&typeof item.text==='string'){
        const video=readSharedVideo(item.video),text=item.text.trim().slice(0,1000)
        if(text||video)addMessage(p.friend,{id:item.id,own:false,at:Date.now(),text,video})
+     }else if(item.type==='wall-post'&&p.friend&&published.current.guestbook){
+       const post=readPost(item.post)
+       if(post?.text)wallPost.current({...post,video:undefined,at:Date.now(),author:p.name||'Friend',authorId:p.friend})
      }
    }catch{}
  }
@@ -141,11 +164,18 @@ export function useFriends(profile:PublicProfile){
    if(!value.startsWith(prefix))throw Error('Paste a Friends code from Viddy.')
    return decodeRoomCode(roomPrefix+value.slice(prefix.length),type)
  }
+ const connection=(id:string)=>[...peers.current].find(p=>p.friend===id&&p.channel?.readyState==='open')?.channel
  function send(id:string,text:string,video?:SharedVideo){
-   const channel=[...peers.current].find(p=>p.friend===id&&p.channel?.readyState==='open')?.channel
+   const channel=connection(id)
    if(!channel)return false
    const entry={id:crypto.randomUUID(),own:true,at:Date.now(),text:text.trim().slice(0,1000),video}
    try{channel.send(JSON.stringify({type:'message',...entry}));addMessage(id,entry);return true}catch{return false}
+ }
+ function signWall(id:string,text:string){
+   const channel=connection(id)
+   if(!channel||!book.friends[id]?.guestbook||!text.trim())return false
+   const post={id:crypto.randomUUID(),at:Date.now(),text:text.trim().slice(0,500)}
+   try{channel.send(JSON.stringify({type:'wall-post',post}));return true}catch{return false}
  }
  function forget(id:string){
    for(const peer of peers.current)if(peer.friend===id)close(peer)
@@ -159,5 +189,5 @@ export function useFriends(profile:PublicProfile){
    for(const peer of peers.current)if(peer.channel?.readyState==='open')void sayHello(peer).catch(()=>{})
  },[profileVersion])
  useEffect(()=>{const active=peers.current;return ()=>{for(const peer of active)peer.peer.close();active.clear()}},[])
- return {book,online,busy,message,signal,exchange,send,forget,cancel:()=>{if(signal)close(signal.member);setSignal(undefined);setMessage('')}}
+ return {book,online,busy,message,signal,exchange,send,signWall,forget,cancel:()=>{if(signal)close(signal.member);setSignal(undefined);setMessage('')}}
 }
