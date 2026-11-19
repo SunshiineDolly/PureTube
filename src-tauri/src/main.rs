@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod desktop;
+mod downloads;
+mod popout;
 mod updates;
 mod youtube_search;
 
@@ -199,7 +201,18 @@ fn main() {
         startup,
         updates::update_configured,
         updates::update_check,
-        updates::update_install
+        updates::update_install,
+        popout::open_player,
+        popout::close_player,
+        popout::player_state,
+        popout::player_pin,
+        popout::player_video,
+        popout::player_sample,
+        popout::player_autoplay,
+        downloads::download_list,
+        downloads::download_video,
+        downloads::download_cancel,
+        downloads::open_downloads
     ];
     let builder = tauri::Builder::default();
     #[cfg(windows)]
@@ -232,10 +245,19 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .on_window_event(|window, event| {
+            if window.label() == "player" {
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    popout::closed(window.app_handle());
+                }
+                return;
+            }
             if window.label() != "main" {
                 return;
             }
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                if let Some(state) = window.try_state::<downloads::Downloads>() {
+                    state.shutdown();
+                }
                 if let Some(tray) = window.app_handle().tray_by_id("puretube") {
                     let _ = tray.set_visible(false);
                 }
@@ -266,6 +288,16 @@ fn main() {
                 None => app.path().app_data_dir()?,
             };
             std::fs::create_dir_all(&dir)?;
+            let download_root = if isolated {
+                dir.join("downloads")
+            } else {
+                app.path().download_dir()?.join("PureTube")
+            };
+            app.manage(downloads::Downloads::new(
+                download_root,
+                dir.join("downloads.json"),
+            ));
+            app.manage(popout::PlayerState::default());
             let client = reqwest::Client::builder()
                 .timeout(Duration::from_secs(15))
                 .redirect(reqwest::redirect::Policy::none())
@@ -286,7 +318,21 @@ fn main() {
             Ok(())
         })
         .invoke_handler(move |invoke| {
-            if invoke.message.webview_ref().label() != "main" {
+            let mini = invoke.message.webview_ref().label() == "player"
+                && matches!(
+                    invoke.message.command(),
+                    "player_state"
+                        | "close_player"
+                        | "player_pin"
+                        | "player_video"
+                        | "player_autoplay"
+                        | "player_sample"
+                        | "load"
+                        | "search_youtube"
+                        | "channel_videos"
+                        | "watch_creator"
+                );
+            if invoke.message.webview_ref().label() != "main" && !mini {
                 invoke
                     .resolver
                     .reject("Native PureTube commands are only available in the local app window.");

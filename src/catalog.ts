@@ -7,11 +7,20 @@ type Cursor={token:string;version:string}
 export type CatalogPage={items:Video[];next:Cursor|null}
 type Page=CatalogPage
 const requests=new Map<string,{task:Promise<Page>;at:number}>()
+async function publicRequest<T>(request:()=>Promise<T>):Promise<T>{
+ try{return await request()}
+ catch(error){
+  if(!/temporarily unavailable|Could not reach|Could not read|readable results|load the next page/.test(errorText(error)))throw error
+  await new Promise(resolve=>setTimeout(resolve,1000))
+  return request()
+ }
+}
+export function requestChannel(id:string,tab:string,cursor:Cursor|null=null){return publicRequest(()=>invoke<Page>('channel_videos',{id,tab,cursor}))}
 export function requestCatalog(query:string,filter:CatalogFilter,cursor:Cursor|null=null,force=false){
  const key=JSON.stringify([query,filter,cursor])
  const old=requests.get(key)
  if(!force&&old&&Date.now()-old.at<120_000)return old.task
- const task=invoke<Page>('search_youtube',{query,filter,cursor}).catch(e=>{requests.delete(key);throw e})
+ const task=publicRequest(()=>invoke<Page>('search_youtube',{query,filter,cursor})).catch(e=>{requests.delete(key);throw e})
  requests.set(key,{task,at:Date.now()})
  if(requests.size>60){const oldest=requests.keys().next();if(!oldest.done)requests.delete(oldest.value)}
  return task
@@ -34,7 +43,7 @@ function usePages(command:'search_youtube'|'channel_videos',params:{query:string
  const tokens=useRef(new Set<string>())
  const load=useCallback((cursor:Cursor|null)=>{
    const params=JSON.parse(input)
-   return command==='search_youtube'?requestCatalog(params.query,params.filter,cursor,attempt>0):invoke<Page>(command,{...params,cursor})
+   return command==='search_youtube'?requestCatalog(params.query,params.filter,cursor,attempt>0):requestChannel(params.id,params.tab,cursor)
  },[command,input,attempt])
  useEffect(()=>{
    const current=++generation.current
@@ -83,7 +92,15 @@ function usePages(command:'search_youtube'|'channel_videos',params:{query:string
    inFlight.current=true
    const current=generation.current
    setState(s=>s?.key===key?{...s,loadingMore:true,moreError:undefined}:s)
-   load(next).then(page=>{
+   const request=async()=>{
+     let page=await load(next)
+     const visited=new Set([next.token])
+     for(let skip=0;!page.items.length&&page.next&&!visited.has(page.next.token)&&skip<2;skip++){
+       visited.add(page.next.token);page=await load(page.next)
+     }
+     return page
+   }
+   request().then(page=>{
      if(generation.current!==current)return
      tokens.current.add(next.token)
      const cursor=page.next&&!tokens.current.has(page.next.token)?page.next:null

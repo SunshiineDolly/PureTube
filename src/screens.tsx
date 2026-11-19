@@ -1,7 +1,8 @@
 import {useState} from 'react'
 import {Plus, RefreshCw} from 'lucide-react'
 import {AutoMore,Empty,Loading,VideoGrid} from './components'
-import {errorText,publicNewest,videoId,visible,type Video} from './domain'
+import {errorText,fillCreator,publicNewest,unique,uploadAge,videoId,visible,type Video} from './domain'
+import {useFollowingPages} from './following'
 import {toggled,type Library} from './library'
 import {useResource} from './hooks'
 import {linkVideo,parseChannel,publicFeed,REFRESH_MINUTES,type PublicFeeds} from './public-feeds'
@@ -27,9 +28,10 @@ export function Quiet({shared}:{shared:Shared}) {
  const allowed=shared.followIds.filter(id=>!data.settings.blocked.includes(id))
  const selected=allowed.includes(filter)?filter:''
  const ids=selected?[selected]:allowed
+ const archive=useFollowingPages(ids)
  const states=ids.flatMap(id=>feeds.states[id]?[feeds.states[id]]:[])
  const liveIds=new Set(Object.values(shared.live.states).flatMap(s=>s.video?[s.video.id]:[]))
- const items=selectUploads(states.flatMap(s=>s.feed?.videos??[]).filter(v=>!liveIds.has(v.id)),data.settings,ids,days,sort==='old')
+ const items=unique([...archive.items.map(v=>fillCreator(v,feeds.states[v.channelId]?.feed?.title??v.channel)),...states.flatMap(s=>s.feed?.videos??[])]).filter(v=>ids.includes(v.channelId)&&!v.live&&!v.scheduledAt&&!liveIds.has(v.id)&&visible(v,data.settings)&&(days===0||uploadAge(v)<=days*86400)).sort((a,b)=>sort==='old'?publicNewest(b,a):publicNewest(a,b))
  const checks=states.flatMap(s=>s.error||!s.feed?[]:[s.feed.checkedAt])
  const failed=states.filter(s=>s.error)
  const stale=failed.some(s=>s.feed)
@@ -37,18 +39,18 @@ export function Quiet({shared}:{shared:Shared}) {
  <button className="button" onClick={shared.subscriptions}><Plus size={16}/> Follow a channel</button>
  {allowed.length>0&&<button className="button" disabled={feeds.busy} onClick={()=>{
    change(d=>({...d,checked:{...d.checked,...Object.fromEntries(allowed.flatMap(id=>{const at=feeds.states[id]?.feed?.checkedAt;return at?[[id,new Date(at).toISOString()]]:[]}))}}))
-   feeds.refresh()
+   archive.reset();feeds.refresh()
    shared.live.refresh()
  }}><RefreshCw size={16} className={feeds.busy?'spin':undefined}/> Refresh</button>}</Heading>
  {!shared.followIds.length?<Notice text={'Add channels to build your personal feed. Your follows stay on this PC.'}/>:!allowed.length?<Empty title="No visible subscriptions" detail="Unblock a followed channel in Settings or add another channel."/>:
  <><div className="filter-row">
  <label>Channel <select value={selected} onChange={e=>{setFilter(e.target.value);setLimit(24)}}><option value="">All channels</option>{allowed.map(id=><option value={id} key={id}>{feeds.states[id]?.feed?.title??id}</option>)}</select></label>
- <label>Uploaded <select value={days} onChange={e=>{setDays(Number(e.target.value));setLimit(24)}}><option value={0}>Recent uploads</option><option value={1}>Past 24 hours</option><option value={7}>Past week</option><option value={30}>Past month</option></select></label>
+ <label>Uploaded <select value={days} onChange={e=>{setDays(Number(e.target.value));setLimit(24)}}><option value={0}>All uploads</option><option value={1}>Past 24 hours</option><option value={7}>Past week</option><option value={30}>Past month</option></select></label>
  <label>Sort <select value={sort} onChange={e=>{setSort(e.target.value);setLimit(24)}}><option value="new">Newest first</option><option value="old">Oldest first</option></select></label>
  <span className="meta" role="status">{feeds.busy?'Checking for uploads...':checks.length?'Checked '+new Date(Math.max(...checks)).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):''}</span></div>
  {failed.length>0&&<Notice text={failed.length===1?failed[0].error+(stale?' Showing its last successful feed.':''):failed.length+' channels could not be refreshed.'+(stale?' Showing the last successful uploads where available.':'')}/>}
  {items.length?<Grid shared={shared} isNew items={items.slice(0,limit)}/>:feeds.busy?<Loading/>:<Empty title={failed.length===ids.length?'Feed unavailable':'No matching recent uploads'} detail={failed.length===ids.length?'Try Refresh when YouTube is reachable.':'Try a wider date range or change your content filters.'}/>}
- <AutoMore enabled={items.length>limit} onReach={()=>setLimit(n=>n+24)}/></>}
+ <AutoMore enabled={items.length>limit||archive.hasMore} busy={archive.busy} error={archive.error} onReach={()=>{if(items.length>limit)setLimit(n=>n+24);else void archive.more().then(()=>setLimit(n=>n+24))}}/></>}
  </>
 }
 
@@ -93,7 +95,7 @@ export function ChannelPage({shared,id,tab='home',setTab}:{shared:Shared;id:stri
  const broadcast=liveCheck?.video&&!liveCheck.error&&visible(liveCheck.video,data.settings)?liveCheck.video:undefined
  if(blocked)return <Empty title="Channel blocked" detail="Manage blocked channels in Settings."/>
  const title=creator?.title??feed?.title??'Channel'
- const items=publicTab.items?.map(v=>v.channelId===id?{...v,channel:v.channel||title,channelImage:v.channelImage||creator?.photo}:v).filter(v=>v.id!==broadcast?.id&&!v.live&&visible(v,data.settings)).sort(publicNewest)
+ const items=publicTab.items?.map(v=>v.channelId===id?fillCreator(v,title,creator?.photo):v).filter(v=>v.id!==broadcast?.id&&!v.live&&visible(v,data.settings)).sort(publicNewest)
  const shelves=creator?.shelves.map(s=>({...s,videos:s.videos.filter(v=>v.id!==broadcast?.id&&visible(v,data.settings))})).filter(s=>s.videos.length>0)??[]
  const issue=publicTab.error
  return <section className="creator-page">

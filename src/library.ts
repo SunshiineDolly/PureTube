@@ -3,7 +3,7 @@ import {readAccent,type Accent} from './palettes.ts'
 export type Settings = {
   theme:'dark'|'light'; accent:Accent; collapsed:boolean; density:'compact'|'comfortable';
   keywords:string[]; blocked:string[]; history:boolean; progress:boolean;
-  reminder:number; showTime:boolean; focus:boolean; tray:boolean
+  reminder:number; showTime:boolean; focus:boolean; tray:boolean; autoplay:boolean
 }
 export type Library = {
  version:1; profileName:string; settings:Settings; follows:string[]; groups:Record<string,string>; later:string[]; favorites:string[];
@@ -11,7 +11,7 @@ export type Library = {
  checked:Record<string,string>; interests:Record<string,number>; daily:{date:string;seconds:number}; liveReminders:Record<string,LiveReminder>;dismissed:string[]
 }
 export type LiveReminder={title:string;at:number}
-export const defaults:Settings = {theme:'dark',accent:'rose',collapsed:false,density:'comfortable',keywords:[],blocked:[],history:true,progress:true,reminder:0,showTime:false,focus:false,tray:false}
+export const defaults:Settings = {theme:'dark',accent:'rose',collapsed:false,density:'comfortable',keywords:[],blocked:[],history:true,progress:true,reminder:0,showTime:false,focus:false,tray:false,autoplay:true}
 export const empty = ():Library => ({version:1,profileName:'',settings:{...defaults},follows:[],groups:{},later:[],favorites:[],collections:[],history:{},progress:{},checked:{},interests:{},daily:{date:'',seconds:0},liveReminders:{},dismissed:[]})
 export const profileName=(value:unknown)=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,48):''
 const record = (v:unknown):Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string,unknown> : {}
@@ -29,7 +29,7 @@ export function decode(raw:unknown):Library {
    if ((choices[k] as readonly unknown[]).includes(s[k])) Object.assign(settings,{[k]:s[k]})
  }
  settings.accent=readAccent(s.accent)
- for (const k of ['collapsed','history','progress','showTime','focus','tray'] as const) {
+ for (const k of ['collapsed','history','progress','showTime','focus','tray','autoplay'] as const) {
    if (typeof s[k]==='boolean') settings[k]=s[k]
  }
  if (finite(s.reminder)) settings.reminder=Math.min(1440,Math.trunc(s.reminder))

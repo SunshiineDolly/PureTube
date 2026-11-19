@@ -33,7 +33,7 @@ async function connect(){
 function call(method,params={}){const id=++seq;return new Promise((ok,no)=>{const socket=ws;const timer=setTimeout(()=>{socket.removeEventListener('message',receive);no(Error('CDP timed out: '+method))},25000);function receive(e){const message=JSON.parse(e.data);if(message.id!==id)return;clearTimeout(timer);socket.removeEventListener('message',receive);message.error?no(Error(message.error.message)):ok(message.result)}socket.addEventListener('message',receive);socket.send(JSON.stringify({id,method,params}))})}
 async function value(expression){const result=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description??expression);return result.result.value}
 const invoke=(name,args={})=>value(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(name)},${JSON.stringify(args)})`)
-const snapshot=()=>value(`window.__TAURI_INTERNALS__.invoke('load').then(d=>Object.fromEntries(['follows','later','favorites','collections','profileName','settings'].map(k=>[k,d[k]])))`)
+const snapshot=()=>value(`window.__TAURI_INTERNALS__.invoke('load').then(d=>Object.fromEntries(['follows','later','favorites','collections','profileName','history','progress','settings'].map(k=>[k,d[k]])))`)
 try{
  await connect()
  await eventually(()=>value('!!document.querySelector(".sidebar")'))
@@ -68,7 +68,11 @@ try{
  await connect()
  await eventually(async()=>await invoke('plugin:app|version')===expected,60000)
  await eventually(()=>value('!!document.querySelector(".sidebar")'))
- assert.deepEqual(await snapshot(),before,'the update must preserve follows, library, profile, and settings')
+ const after=await snapshot()
+ for(const key of Object.keys(before)){
+  if(key==='settings')for(const setting of Object.keys(before.settings))assert.deepEqual(after.settings[setting],before.settings[setting],'the update must preserve '+setting)
+  else assert.deepEqual(after[key],before[key],'the update must preserve '+key)
+ }
  assert.equal(await invoke('update_configured'),true)
  assert.equal(await invoke('update_check'),null,'the installed update must recognize it is current')
  const count=Number(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',`@(Get-Process puretube -ErrorAction SilentlyContinue | Where-Object Path -eq '${exe.replaceAll("'","''")}').Count`],{encoding:'utf8',windowsHide:true}).trim())

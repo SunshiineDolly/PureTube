@@ -38,6 +38,7 @@ export function useRecommendations(surface:Surface,data:Library){
  const [feed,setFeed]=useState<Feed|undefined>(()=>sessions.get(surface))
  const [iteration,setIteration]=useState(0)
  const nextSource=useRef(0)
+ const emptyBatches=useRef(0)
  const current=useRef(data),generation=useRef(0),working=useRef(false)
  current.current=data
  const sessionRef=useRef(feed);sessionRef.current=feed
@@ -51,6 +52,7 @@ export function useRecommendations(surface:Surface,data:Library){
    const run=++generation.current
    const seed=(cached?.seed??Math.floor(Date.now()/1000))+1
    const plan=recommendationPlan(current.current,surface,seed)
+   emptyBatches.current=0
    const prior=new Set(cached?.items.map(v=>v.id)??[])
    const seen={...exposures}
    // A manual refresh should not immediately return the previous screen,
@@ -73,7 +75,7 @@ export function useRecommendations(surface:Surface,data:Library){
        if(active&&generation.current===run&&successes===0)store({...sessionRef.current!,error:errorText(error),busy:pending>1})
      }).finally(()=>{
        pending--
-       if(active&&generation.current===run&&pending===0)store({...sessionRef.current!,busy:false,error:successes?undefined:sessionRef.current?.error})
+       if(active&&generation.current===run&&pending===0)store({...sessionRef.current!,items:successes?rankRecommendations(pool,current.current,seen,seed,other(),90):sessionRef.current!.items,busy:false,error:successes?undefined:sessionRef.current?.error})
      })
    }
    return ()=>{active=false;generation.current++}
@@ -82,21 +84,36 @@ export function useRecommendations(surface:Surface,data:Library){
  async function more(){
    if(working.current||!activeFeed||activeFeed.busy)return
    const order=activeFeed.sources.map((_,i)=>(nextSource.current+i)%activeFeed.sources.length)
-   const sourceIndex=order.find(i=>activeFeed.sources[i].next)??-1
-   if(sourceIndex<0)return
+   let sourceIndex=order.find(i=>activeFeed.sources[i].next)??-1
+   let base=activeFeed
+   if(sourceIndex<0){
+     const seed=activeFeed.seed+1
+     const fresh=recommendationPlan(current.current,surface,seed).map(source=>({...source,next:null}))
+     base={...activeFeed,seed,sources:fresh};sourceIndex=0
+   }
    nextSource.current=(sourceIndex+1)%activeFeed.sources.length
-   const source=activeFeed.sources[sourceIndex]
+   const source=base.sources[sourceIndex]
    working.current=true
    const run=generation.current
-   store({...activeFeed,busy:true,moreError:undefined})
+   store({...base,busy:true,moreError:undefined})
    try{
-     const page=await requestCatalog(source.query,source.filter,source.next)
+     let page=await requestCatalog(source.query,source.filter,source.next)
+     const existing=new Set(sessionRef.current?.items.map(v=>v.id)??[])
+     const exclusions=new Set([...other(),...existing])
+     let candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,base.seed,exclusions,30)
+     for(let skip=0;!candidates.length&&page.next&&skip<2;skip++){
+       const cursor=page.next
+       page=await requestCatalog(source.query,source.filter,cursor)
+       candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,base.seed,exclusions,30)
+       if(page.next?.token===cursor.token){page={...page,next:null};break}
+     }
      if(generation.current!==run)return
      const latest=sessionRef.current!
      const sources=[...latest.sources]
      sources[sourceIndex]={...source,next:page.next?.token===source.next?.token?null:page.next}
-     const candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,latest.seed,other(),30)
-     store({...latest,items:appendRecommendations(latest.items,candidates),sources,busy:false})
+     const items=appendRecommendations(latest.items,candidates)
+     emptyBatches.current=items.length===latest.items.length?emptyBatches.current+1:0
+     store({...latest,items,sources,busy:false,moreError:emptyBatches.current>=4?'No new matches in this mix. Choose another category or try a new mix.':undefined})
    }catch(error){if(generation.current===run)store({...sessionRef.current!,busy:false,moreError:errorText(error)})}
    finally{working.current=false}
  }
@@ -121,5 +138,5 @@ export function useRecommendations(surface:Surface,data:Library){
    },30_000)
    return ()=>clearInterval(timer)
  },[surface])
- return {feed,target,refresh:()=>setIteration(n=>n+1),more,hasMore:(feed?.items.length??0)<150&&!!feed?.sources.some(s=>s.next)}
+ return {feed,target,refresh:()=>setIteration(n=>n+1),more,hasMore:!!feed&&!feed.error}
 }

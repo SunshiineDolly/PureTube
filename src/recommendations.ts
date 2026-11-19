@@ -21,7 +21,7 @@ const alternatives:Record<string,string[]>={
 }
 export function recommendationPlan(data:Library,surface:Surface,seed:number){
  const ranked=rankedTopics(data.settings.history?data.interests:{})
- const preferred=ranked.filter(t=>(data.interests[t.name]??0)>0).slice(0,5)
+ const preferred=data.settings.history?ranked.filter(t=>(data.interests[t.name]??0)>0).slice(0,5):[]
  const shuffled=[...topics].sort((a,b)=>hash(surface+seed+a.name)-hash(surface+seed+b.name))
  const chosen=unique([
    ...(preferred.length?[{...preferred[seed%preferred.length],id:preferred[seed%preferred.length].name}]:[]),
@@ -39,7 +39,7 @@ export function rankRecommendations(items:Video[],data:Library,seen:Record<strin
  const score=(v:Video)=>{
    const exposure=seen[v.id]??0
    const penalty=exposure?Math.max(0,1-(now-exposure)/86_400_000)*1000:0
-   const affinity=v.category?Math.min(data.interests[v.category]??0,15):0
+   const affinity=data.settings.history&&v.category?Math.min(data.interests[v.category]??0,15):0
    const label=v.publishedLabel?.toLowerCase()??''
    const fresh=/\b(?:\d+\s*(?:h|hr|hour|d|day|w|wk|week)s?)\s+ago\b/.test(label)?18:0
    return hash(seed+v.id)%100+affinity+fresh-penalty
@@ -62,7 +62,7 @@ export function rankRecommendations(items:Video[],data:Library,seen:Record<strin
  return output
 }
 
-export function appendRecommendations(existing:Video[],incoming:Video[],limit=150){
+export function appendRecommendations(existing:Video[],incoming:Video[],limit=Infinity){
  const counts=new Map<string,number>(),ids=new Set<string>(),titles=new Set<string>()
  const result:Video[]=[]
  for(const v of [...existing,...incoming]){

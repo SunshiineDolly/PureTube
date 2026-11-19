@@ -2,7 +2,7 @@ use crate::{AppData, Result};
 use reqwest::Url;
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{ipc::Channel, AppHandle, State};
+use tauri::{ipc::Channel, AppHandle, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
 const PUBLIC_KEY: Option<&str> = option_env!("PURETUBE_UPDATER_PUBLIC_KEY");
@@ -99,6 +99,9 @@ pub async fn update_install(
         let _ = progress.send(json!({"event":"verifying"}));
     }).await.map_err(|_| "The update could not be downloaded and verified. Nothing was installed. Try again later.")?;
     let _ = progress.send(json!({"event":"installing"}));
+    if let Some(downloads) = app.try_state::<crate::downloads::Downloads>() {
+        downloads.shutdown();
+    }
     update.install(bytes).map_err(|_| "Windows could not start the update installer. Try again or download the release from GitHub.".into())
 }
 

@@ -33,3 +33,14 @@ test('a new mix rotates query sources while retaining a learned interest',()=>{
  assert.notDeepEqual(first.map(s=>s.query),second.map(s=>s.query))
  assert.notDeepEqual(first.map(s=>s.query),recommendationPlan(data,'discover',104).map(s=>s.query))
 })
+test('discovery appends beyond the former 150-video ceiling without duplicates',()=>{
+ const first=Array.from({length:150},(_,i)=>video(i))
+ const next=Array.from({length:110},(_,i)=>video(150+i))
+ const combined=appendRecommendations(first,[...first.slice(0,5),...next])
+ assert.equal(combined.length,260)
+ assert.equal(new Set(combined.map(v=>v.id)).size,260)
+})
+test('turning off history also stops using retained interests to select query sources',()=>{
+ const data=empty(),plain=empty();data.interests.Gaming=15;data.settings.history=false;plain.settings.history=false
+ assert.deepEqual(recommendationPlan(data,'home',104),recommendationPlan(plain,'home',104))
+})

@@ -15,8 +15,8 @@ function playerApi() {
    document.head.appendChild(script)
  }).catch(e=>{api=undefined;throw e}) as Promise<NonNullable<Window['YT']>>
 }
-export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void}) {
- const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed})
+export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,sampleInterval=8}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;sampleInterval?:number}) {
+ const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController})
  const initial=useRef(start)
  const resume=useRef(start),seekWhenReady=useRef(()=>{})
  resume.current=start
@@ -24,7 +24,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed}:{id:
  const [error,setError]=useState('')
  const [liveState,setLiveState]=useState<'connecting'|'playing'|'paused'|'buffering'|'ended'>('connecting')
  const jump=useRef<()=>void>(()=>{})
- callbacks.current={onSample,onPlay,onElapsed}
+ callbacks.current={onSample,onPlay,onElapsed,onEnded,onController}
  useEffect(()=>{
    const host=mount.current!
    const frame=document.createElement('iframe')
@@ -61,7 +61,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed}:{id:
        if(force)count();else count(playing)
        if(live&&bufferedAt&&Date.now()-bufferedAt>14_000&&!document.hidden)goLive()
        const position=player.getCurrentTime(), duration=player.getDuration()
-       if(force || timed>=8 || (duration>0&&playing&&Math.abs(position-lastPosition)>=8)) {
+       if(force || timed>=sampleInterval || (duration>0&&playing&&Math.abs(position-lastPosition)>=sampleInterval)) {
          callbacks.current.onSample(position,duration,timed)
          lastPosition=position;timed=0
        }
@@ -72,7 +72,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed}:{id:
    playerApi().then(YT=>{
      if(closed) return
      player=new YT.Player(frame,{events:{
-       onReady:()=>{ready=true;seekWhenReady.current()},
+       onReady:()=>{ready=true;callbacks.current.onController?.(()=>player?.getCurrentTime()??0);seekWhenReady.current()},
        onStateChange:e=>{
          if(closed)return
          count(e.data===1)
@@ -86,6 +86,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed}:{id:
            else if(e.data===0){ended=true;setLiveState('ended')}
          }
          if(e.data===0 || e.data===2) sample(true)
+         if(e.data===0&&!live)callbacks.current.onEnded?.()
        },
        onError:e=>{if(closed)return;count(false);setError(e.data===153?'YouTube couldn’t play this video in PureTube. Try another result.':[101,150].includes(e.data)?'The creator has disabled embedded playback.':e.data===100?'This video is unavailable or private.':'YouTube could not play this video here.')}
      }})

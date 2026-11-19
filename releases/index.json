@@ -150,5 +150,13 @@
     "size": 4372582,
     "sha256": "6bff607122eab617cb9e67b34ef386dbf1f29bb557dddc76cdd8b4b82d10a7eb",
     "source": "retained"
+  },
+  {
+    "version": "0.10.0",
+    "tag": "v0.10.0",
+    "installer": "PureTube_0.10.0_x64-setup.exe",
+    "size": 4552700,
+    "sha256": "6084e169a01116370b66f6b8cdd5b3d3cfa8ae2a2e88ac28f2bbcc4459456312",
+    "source": "retained"
   }
 ]
