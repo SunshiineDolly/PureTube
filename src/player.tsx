@@ -1,7 +1,8 @@
 import {RefreshCw,Volume2,VolumeX} from 'lucide-react'
 import {useEffect,useRef,useState} from 'react'
 import {playbackClock} from './playback-clock'
-type Player = {destroy():void;getCurrentTime():number;getDuration():number;getPlayerState():number;getVideoUrl():string;getVolume():number;setVolume(volume:number):void;isMuted():boolean;mute():void;unMute():void;loadVideoById(id:string):void;seekTo(position:number,allow:boolean):void}
+import type {RoomPlayback} from './watch-together'
+type Player = {destroy():void;getCurrentTime():number;getDuration():number;getPlayerState():number;getVideoUrl():string;getVolume():number;setVolume(volume:number):void;isMuted():boolean;mute():void;unMute():void;loadVideoById(id:string):void;seekTo(position:number,allow:boolean):void;playVideo():void;pauseVideo():void}
 type Events = {onReady:()=>void;onError:(e:{data:number})=>void;onStateChange:(e:{data:number})=>void}
 declare global { interface Window { YT?:{Player:new (frame:HTMLIFrameElement, config:{events:Events})=>Player};onYouTubeIframeAPIReady?:()=>void } }
 let api:Promise<NonNullable<Window['YT']>>|undefined
@@ -16,9 +17,13 @@ function playerApi() {
    document.head.appendChild(script)
  }).catch(e=>{api=undefined;throw e}) as Promise<NonNullable<Window['YT']>>
 }
-export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,volumeControls=false,sampleInterval=8}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;onVideoChange?:(id:string)=>void;sampleInterval?:number;volumeControls?:boolean}) {
- const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange})
+export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,volumeControls=false,sampleInterval=8,roomPlayback,onRoomController}:{id:string;start:number;live?:boolean;onSample:(position:number,duration:number,playing:number)=>void;onPlay:()=>void;onElapsed:(seconds:number)=>void;onEnded?:()=>void;onController?:(position:()=>number)=>void;onRestricted?:()=>void;onVideoChange?:(id:string)=>void;sampleInterval?:number;volumeControls?:boolean;roomPlayback?:RoomPlayback;onRoomController?:(read:()=>RoomPlayback|undefined)=>void}) {
+ const mount=useRef<HTMLDivElement>(null), callbacks=useRef({onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,onRoomController})
  const initial=useRef(start)
+ const roomTarget=useRef(roomPlayback)
+ roomTarget.current=roomPlayback
+ const syncRoom=useRef(()=>{})
+ useEffect(()=>{syncRoom.current()},[roomPlayback])
  const resume=useRef(start),seekWhenReady=useRef(()=>{})
  resume.current=start
  useEffect(()=>{seekWhenReady.current()},[start])
@@ -28,7 +33,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
  function toggleMute(){const p=volumePlayer.current;if(!p)return;if(muted||volume===0){if(volume===0){p.setVolume(50);setVolume(50)}p.unMute();setMuted(false)}else{p.mute();setMuted(true)}}
  const [liveState,setLiveState]=useState<'connecting'|'playing'|'paused'|'buffering'|'ended'>('connecting')
  const jump=useRef<()=>void>(()=>{})
- callbacks.current={onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange}
+ callbacks.current={onSample,onPlay,onElapsed,onEnded,onController,onRestricted,onVideoChange,onRoomController}
  useEffect(()=>{
    const host=mount.current!
    const frame=document.createElement('iframe')
@@ -36,7 +41,7 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
    frame.allow='autoplay; encrypted-media; fullscreen; picture-in-picture'
    frame.allowFullscreen=true
    frame.referrerPolicy='strict-origin-when-cross-origin'
-   const params=new URLSearchParams({autoplay:'1',controls:'1',enablejsapi:'1',origin:location.origin,rel:'0',playsinline:'1'})
+   const params=new URLSearchParams({autoplay:roomTarget.current?.playing===false?'0':'1',controls:'1',enablejsapi:'1',origin:location.origin,rel:'0',playsinline:'1'})
    if(!live&&initial.current>0)params.set('start',String(Math.floor(initial.current)))
    frame.src='https://www.youtube.com/embed/'+id+'?'+params
    let closed=false, player:Player|undefined, ready=false, played=false, timed=0, lastPosition=-1
@@ -47,6 +52,18 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
      if(elapsed>0)callbacks.current.onElapsed(elapsed)
    }
    let bufferedAt=0,pausedAt=0,hiddenAt=0,lastJump=-Infinity,ended=false
+   let roomPlaying=false
+   syncRoom.current=()=>{
+     const target=roomTarget.current
+     if(closed||live||!ready||!player||target?.video!==id)return
+     const state=player.getPlayerState()
+     const delta=Math.abs(player.getCurrentTime()-target.position)
+     if(delta>(target.playing?1.8:0.5))player.seekTo(target.position,true)
+     if(target.playing&&state!==1&&state!==3)player.playVideo()
+     if(!target.playing&&(state===1||state===3))player.pauseVideo()
+   }
+   callbacks.current.onRoomController?.(()=>ready&&!closed&&!live&&player
+     ?{video:id,position:player.getCurrentTime()||0,playing:roomPlaying}:undefined)
    let resumed=initial.current>0
    seekWhenReady.current=()=>{
      if(!live&&ready&&player&&!resumed&&resume.current>0&&player.getCurrentTime()<5){
@@ -76,9 +93,10 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
    playerApi().then(YT=>{
      if(closed) return
      player=new YT.Player(frame,{events:{
-       onReady:()=>{ready=true;volumePlayer.current=player;let initialVolume=player?.getVolume()??100;try{const saved=localStorage.getItem('viddy-volume');if(saved!==null&&Number.isFinite(Number(saved))){initialVolume=Math.max(0,Math.min(100,Number(saved)));player?.setVolume(initialVolume)}}catch{};setVolume(initialVolume);setMuted((player?.isMuted()??false)||initialVolume===0);sample();callbacks.current.onController?.(()=>player?.getCurrentTime()??0);seekWhenReady.current()},
+       onReady:()=>{ready=true;volumePlayer.current=player;let initialVolume=player?.getVolume()??100;try{const saved=localStorage.getItem('viddy-volume');if(saved!==null&&Number.isFinite(Number(saved))){initialVolume=Math.max(0,Math.min(100,Number(saved)));player?.setVolume(initialVolume)}}catch{};setVolume(initialVolume);setMuted((player?.isMuted()??false)||initialVolume===0);sample();callbacks.current.onController?.(()=>player?.getCurrentTime()??0);if(roomTarget.current)syncRoom.current();else seekWhenReady.current()},
        onStateChange:e=>{
          if(closed)return
+         if(e.data!==3)roomPlaying=e.data===1
          if(e.data===1&&player){try{const selected=new URL(player.getVideoUrl()).searchParams.get('v');if(selected&&/^[\w-]{11}$/.test(selected)&&selected!==id){callbacks.current.onVideoChange?.(selected);return}}catch{}}
          count(e.data===1)
          if(e.data===1 && !played) {played=true;callbacks.current.onPlay()}

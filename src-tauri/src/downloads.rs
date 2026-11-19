@@ -297,10 +297,11 @@ pub async fn preview_stream(app: tauri::AppHandle, id: String) -> Result<String>
         let mut command=Command::new(&tools["yt-dlp.exe"]);
         command.args([
             "--ignore-config", "--no-playlist", "--no-warnings", "--no-cache-dir",
-            "--check-formats", "--socket-timeout", "5", "--retries", "0",
+            "--socket-timeout", "5", "--retries", "0",
             "--extractor-retries", "0", "--match-filter", "!is_live & !is_upcoming",
             "--get-url", "--js-runtimes", &format!("deno:{}", tools["deno.exe"].display()),
-            "-f", "bv[height>=360][height<=720][ext=mp4]/b[height>=360][height<=720][ext=mp4]",
+            // WebView2 wants a file URL rather than the HLS playlists also listed as MP4.
+            "-f", "b[protocol=https][ext=mp4][height>=360][height<=480]/bv[protocol=https][vcodec^=avc1][height>=360][height<=480]/bv[protocol=https][ext=webm][height>=360][height<=480]/b[protocol=https][ext=mp4][height<=480]/bv[protocol=https][vcodec^=avc1][height<=480]",
             "--", &format!("https://www.youtube.com/watch?v={id}"),
         ]);
         #[cfg(windows)]

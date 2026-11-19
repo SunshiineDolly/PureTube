@@ -32,6 +32,7 @@ import {ScheduledDetails,useLiveReminders,useScheduledStatus} from './live'
 import {CreatorByline,useWatchCreator} from './creator-links'
 import {useFollowedLive} from './followed-live'
 import {LiveChat} from './live-chat'
+import {useWatchTogether,WatchTogether,type RoomPlayback} from './watch-together'
 import './styles.css'
 import './studio.css'
 
@@ -55,6 +56,18 @@ function App() {
  const searchRef=useRef<HTMLInputElement>(null),main=useRef<HTMLElement>(null),dataRef=useRef(data)
  dataRef.current=data
  const updates=useUpdates(ready)
+ const readRoomPlayback=useRef<()=>RoomPlayback|undefined>(()=>undefined)
+ const getRoomPlayback=()=>{
+   const playback=readRoomPlayback.current()
+   return !floating&&playback?.video===activeVideo?.id?playback:undefined
+ }
+ const watchRoom=useWatchTogether(getRoomPlayback,activeVideo?.id,id=>{
+   const video=data.savedVideos[id]??linkVideo(id)
+   setPlaylist(undefined)
+   if(floating)void invoke('close_player').catch(()=>{})
+   setActiveVideo(video)
+   go({name:'watch',video})
+ })
  const liveAlerts=useLiveReminders(data,change,ready)
  const followIds=data.follows
  const feeds=usePublicFeeds(ready?followIds.filter(id=>!s.blocked.includes(id)):[])
@@ -160,7 +173,7 @@ function App() {
  return <div className={'app '+(s.collapsed?'collapsed ':'')+(s.density==='compact'?'compact':'')}>
  {notice&&<div className="viddy-toast" role="status" key={notice}><span aria-hidden="true">✦</span>{notice}</div>}<BrandIntro enabled={ready&&s.intro}/><header className="top" data-tauri-drag-region><div className="header-brand" data-tauri-drag-region>{true&&<button className="icon top-menu" aria-label={s.collapsed?'Expand sidebar':'Collapse sidebar'} aria-expanded={!s.collapsed} disabled={!ready} onClick={()=>setting('collapsed',!s.collapsed)}><Menu size={23}/></button>}<button className="brand" aria-label="Viddy Home" onClick={()=>go({name:'home'})}><BrandLockup/></button></div>
  <div className="header-center" data-tauri-drag-region>{ <SearchBar inputRef={searchRef} ready={ready} text={text} setText={setText} submit={submit}/>}</div>
- <div className="header-actions">{true&&<>
+ <div className="header-actions"><WatchTogether session={watchRoom} canHost={!!activeVideo&&!floating&&!activeVideo.live&&!activeVideo.scheduledAt}/>{true&&<>
  <button className="icon theme" aria-label={'Switch to '+(s.theme==='dark'?'light':'dark')+' theme'} disabled={!ready} onClick={()=>setting('theme',s.theme==='dark'?'light':'dark')}>{s.theme==='dark'?<Sun size={19}/>:<Moon size={19}/>}</button>
  {updates.release&&<button className="button accent" onClick={()=>go({name:'settings'})}>Update available</button>}
 </>}
@@ -189,7 +202,7 @@ function App() {
  route.name==='subscriptions'?<Subscriptions shared={shared}/>:
  route.name==='channel'?<ChannelPage key={route.id} shared={shared} id={route.id} tab={route.tab} setTab={tab=>setRoute({...route,tab})}/>:
  route.name==='watch'?null:<LibraryPage key={route.name} shared={shared} kind={route.name}/>}
- {activeVideo&&<Watch key={activeVideo.id+':'+playbackRun} video={activeVideo} shared={shared} theater={theater} setTheater={setTheater} onSample={noteSample} onElapsed={seconds=>setSession(s=>s+seconds)} playlist={playlist} onQueueChange={q=>{if(playlist?.name&&playlist.name!=='Queue')change(d=>playlist.name==='Favorites'?{...d,favorites:q?.ids??[]}:{...d,collections:d.collections.map(c=>c.name===playlist.name?{...c,ids:q?.ids??[]}:c)});setPlaylist(q);if(q&&q.ids[q.index]!==activeVideo.id){const video=data.savedVideos[q.ids[q.index]]??linkVideo(q.ids[q.index]);setPlaybackRun(n=>n+1);if(route.name==='watch')go({name:'watch',video});else setActiveVideo(video)}}} onQueueWatch={queueWatch} onQueueClose={()=>setPlaylist(undefined)} onQueueRepeat={()=>setPlaylist(q=>q?{...q,repeat:!q.repeat}:q)} docked={route.name!=='watch'} onRestore={()=>{let previous=-1;for(let i=routes.current.length-1;i>=0;i--)if(routes.current[i].route.name==='watch'&&(routes.current[i].route as {video:Video}).video.id===activeVideo.id){previous=i;break}if(previous>=0){const entry=routes.current[previous];routes.current=routes.current.slice(0,previous);restoreScroll.current=entry.scroll;setRoute({name:'watch',video:activeVideo})}else go({name:'watch',video:activeVideo})}} onStop={()=>{setActiveVideo(undefined);setPlaylist(undefined);if(floating)void invoke('close_player');setFloating(null)}} popped={floating?.video.id===activeVideo.id} returned={returned?.id===activeVideo.id?returned.start:undefined} onPopout={async(video,start)=>{await invoke('open_player',{payload:{video,start,theme:s.theme,accent:s.accent,autoplay:s.autoplay,playlist}});setFloating({video,start})}}/>}
+ {activeVideo&&<Watch key={activeVideo.id+':'+playbackRun} video={activeVideo} roomPlayback={watchRoom.playback} inRoom={!!watchRoom.room} onRoomController={read=>{readRoomPlayback.current=read}} shared={shared} theater={theater} setTheater={setTheater} onSample={noteSample} onElapsed={seconds=>setSession(s=>s+seconds)} playlist={playlist} onQueueChange={q=>{if(playlist?.name&&playlist.name!=='Queue')change(d=>playlist.name==='Favorites'?{...d,favorites:q?.ids??[]}:{...d,collections:d.collections.map(c=>c.name===playlist.name?{...c,ids:q?.ids??[]}:c)});setPlaylist(q);if(q&&q.ids[q.index]!==activeVideo.id){const video=data.savedVideos[q.ids[q.index]]??linkVideo(q.ids[q.index]);setPlaybackRun(n=>n+1);if(route.name==='watch')go({name:'watch',video});else setActiveVideo(video)}}} onQueueWatch={queueWatch} onQueueClose={()=>setPlaylist(undefined)} onQueueRepeat={()=>setPlaylist(q=>q?{...q,repeat:!q.repeat}:q)} docked={route.name!=='watch'} onRestore={()=>{let previous=-1;for(let i=routes.current.length-1;i>=0;i--)if(routes.current[i].route.name==='watch'&&(routes.current[i].route as {video:Video}).video.id===activeVideo.id){previous=i;break}if(previous>=0){const entry=routes.current[previous];routes.current=routes.current.slice(0,previous);restoreScroll.current=entry.scroll;setRoute({name:'watch',video:activeVideo})}else go({name:'watch',video:activeVideo})}} onStop={()=>{if(watchRoom.room)void watchRoom.leave();setActiveVideo(undefined);setPlaylist(undefined);if(floating)void invoke('close_player');setFloating(null)}} popped={floating?.video.id===activeVideo.id} returned={returned?.id===activeVideo.id?returned.start:undefined} onPopout={async(video,start)=>{await invoke('open_player',{payload:{video,start,theme:s.theme,accent:s.accent,autoplay:s.autoplay,playlist}});setFloating({video,start})}}/>}
  {true&&route.name!=='settings'&&<footer className="attribution"><button aria-label="Developed with YouTube; open YouTube" onClick={()=>invoke('open_info',{page:'youtube'}).catch(e=>setNotice(errorText(e)))}><img src={s.theme==='dark'?new URL('./youtube-light.png',import.meta.url).href:new URL('./youtube-dark.png',import.meta.url).href} alt="Developed with YouTube"/></button></footer>}
  </main></div>
 }

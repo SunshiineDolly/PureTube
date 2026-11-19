@@ -23,21 +23,30 @@ function smoothPreview(id:string){
 
 export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatch:(v:Video)=>void;progress?:{at:number;duration:number};checked?:string}){
  const [preview,setPreview]=useState<{id:string;url:string;playing:boolean}>()
+ const [animated,setAnimated]=useState<{id:string;url:string;loaded:boolean}>()
  const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined)
  const run=useRef(0)
  const stop=()=>{
    run.current++
    clearTimeout(timer.current)
    setPreview(undefined)
+   setAnimated(undefined)
+ }
+ function loadVideo(current:number){
+   void smoothPreview(v.id)?.then(url=>{
+     if(run.current===current)setPreview({id:v.id,url,playing:false})
+   },()=>{})
  }
  function start(){
-   if(v.live||v.scheduledAt||v.paid||!v.embeddable||!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return
+   if(v.live||v.scheduledAt||v.paid||!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return
    const current=++run.current
    timer.current=setTimeout(()=>{
-     void smoothPreview(v.id)?.then(url=>{
-       if(run.current===current)setPreview({id:v.id,url,playing:false})
-     },()=>{/* Keep the thumbnail when YouTube does not supply a playable stream. */})
-   },250)
+     if(v.previewImage?.startsWith('https://i.ytimg.com/an_webp/')){
+       setAnimated({id:v.id,url:v.previewImage,loaded:false})
+     }else if(v.embeddable){
+       loadVideo(current)
+     }
+   },180)
  }
  useEffect(()=>{
    const hidden=()=>{if(document.hidden)stop()}
@@ -49,10 +58,18 @@ export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatc
    }
  },[v.id])
  const currentPreview=preview?.id===v.id?preview:undefined
+ const currentAnimation=animated?.id===v.id?animated:undefined
  const duration=v.duration>=3600?Math.floor(v.duration/3600)+':'+String(Math.floor(v.duration/60)%60).padStart(2,'0')+':'+String(v.duration%60).padStart(2,'0'):Math.floor(v.duration/60)+':'+String(v.duration%60).padStart(2,'0')
  return <button className="thumbnail video-thumbnail" aria-label={'Watch '+v.title} onClick={()=>{stop();onWatch(v)}} onMouseEnter={start} onMouseLeave={stop} onBlur={stop}>
    <span className="thumb-placeholder" aria-hidden="true"><Play size={21}/></span>
    {v.image&&<img src={v.image} loading="lazy" alt=""/>}
+   {currentAnimation&&<img className="thumbnail-preview" src={currentAnimation.url} alt="" aria-hidden="true"
+     data-playing={currentAnimation.loaded}
+     onLoad={()=>setAnimated(active=>active===currentAnimation?{...active,loaded:true}:active)}
+     onError={()=>{
+       setAnimated(undefined)
+       if(v.embeddable)loadVideo(run.current)
+     }}/>}
    {currentPreview&&<video className="thumbnail-preview" data-playing={currentPreview.playing}
      src={currentPreview.url} muted autoPlay loop playsInline disablePictureInPicture aria-hidden="true"
      onPlaying={()=>setPreview(active=>active?.url===currentPreview.url?{...active,playing:true}:active)}
