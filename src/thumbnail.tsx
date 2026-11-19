@@ -10,11 +10,11 @@ async function smoothPreview(id:string){const cached=previewCache.get(id);if(cac
 let stopCurrent:(()=>void)|undefined
 export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatch:(v:Video)=>void;progress?:{at:number;duration:number};checked?:string}){
  const [preview,setPreview]=useState(false)
- const [previewUrl,setPreviewUrl]=useState('')
+ const [previewUrl,setPreviewUrl]=useState(''),[fallback,setFallback]=useState(false)
  const hovered=useRef(false)
  const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined)
  const stop=useRef(()=>{})
- stop.current=()=>{hovered.current=false;clearTimeout(timer.current);setPreview(false)}
+ stop.current=()=>{hovered.current=false;clearTimeout(timer.current);setPreview(false);setFallback(false)}
  function start(){
    if(v.scheduledAt||!v.embeddable||!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return
    hovered.current=true
@@ -23,7 +23,7 @@ export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatc
      stopCurrent?.()
      const close=()=>stop.current()
      stopCurrent=close
-     void smoothPreview(v.id).then(url=>{if(hovered.current){setPreviewUrl(url);setPreview(true)}},()=>{})
+     void smoothPreview(v.id).then(url=>{if(hovered.current){setPreviewUrl(url);setPreview(true)}},()=>{if(hovered.current){setFallback(true);setPreview(true)}})
 
    },750)
  }
@@ -36,7 +36,7 @@ export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatc
  return <button className="thumbnail" aria-label={'Watch '+v.title} onClick={()=>{stop.current();onWatch(v)}} onMouseEnter={start} onMouseLeave={()=>stop.current()} onBlur={()=>stop.current()}>
    <span className="thumb-placeholder" aria-hidden="true"><Play size={21}/></span>
    {v.image&&<img src={v.image} loading="lazy" alt=""/>}
-   {preview&&<video className="thumbnail-preview" src={previewUrl} muted autoPlay loop playsInline onError={()=>setPreview(false)} aria-hidden="true"/>}
+   {preview&&(fallback?<iframe className="thumbnail-preview" src={'https://www.youtube.com/embed/'+v.id+'?autoplay=1&mute=1&controls=0&playsinline=1&rel=0'} title="Muted preview" tabIndex={-1} aria-hidden="true" allow="autoplay; encrypted-media" referrerPolicy="strict-origin-when-cross-origin"/>:<video className="thumbnail-preview" src={previewUrl} muted autoPlay loop playsInline onError={()=>setFallback(true)} aria-hidden="true"/>)}
    {v.duration>0&&<span className="duration">{duration}</span>}
    {v.live&&<span className="live-badge">Live</span>}
    {!!v.scheduledAt&&!v.live&&<span className="live-badge scheduled-badge">Scheduled</span>}

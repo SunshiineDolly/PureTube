@@ -47,7 +47,6 @@ export function useRecommendations(surface:Surface,data:Library){
  useEffect(()=>{
    loadExposures()
    const cached=sessions.get(surface)
-   if(iteration===0&&cached&&!cached.busy&&cached.items.length&&Date.now()-cached.at<5*60_000){setFeed(cached);return}
    let active=true
    const run=++generation.current
    const seed=(cached?.seed??Math.floor(Date.now()/1000))+1
@@ -131,12 +130,5 @@ export function useRecommendations(surface:Surface,data:Library){
    target.current.querySelectorAll('[data-video-id]').forEach(node=>observer.observe(node))
    return ()=>observer.disconnect()
  },[feed?.items])
- useEffect(()=>{
-   const timer=setInterval(()=>{
-     const cached=sessions.get(surface)
-     if(!document.hidden&&cached&&!cached.busy&&Date.now()-cached.at>5*60_000)setIteration(n=>n+1)
-   },30_000)
-   return ()=>clearInterval(timer)
- },[surface])
  return {feed,target,refresh:()=>setIteration(n=>n+1),more,hasMore:!!feed&&!feed.error}
 }

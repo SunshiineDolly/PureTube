@@ -119,7 +119,7 @@ pub fn configure_tray(app: &tauri::App) -> tauri::Result<()> {
     let enabled = read(&configured.db)
         .ok()
         .flatten()
-        .and_then(|v| v.pointer("/settings/tray").and_then(Value::as_bool))
+        .and_then(|v| Some(v.pointer("/settings/tray").and_then(Value::as_bool).unwrap_or(false)||v.pointer("/settings/closeToTray").and_then(Value::as_bool).unwrap_or(false)))
         .unwrap_or(false);
     tray.set_visible(enabled)?;
     Ok(())

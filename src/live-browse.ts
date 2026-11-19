@@ -20,7 +20,6 @@ export function useLiveBrowse(mode:'live'|'scheduled',category:string){
   for(const source of initial){source.loaded=true;void load(source,revision>0).then(page=>{if(run!==generation.current)return;success++;source.next=page.next;pool.push(...page.items.map(v=>({...v,category:source.topic})));const items=mix(pool);cache.set(key,{items,at:Date.now()});setState({key,items,busy:pending>1,error:''})},e=>{if(run===generation.current&&!success)setState(s=>({...s,error:errorText(e)}))}).finally(()=>{pending--;if(!pending&&run===generation.current)setState(s=>({...s,busy:false,error:success?'':s.error}))})}
   return()=>{generation.current++}
  },[key,revision])
- useEffect(()=>{const timer=setInterval(()=>{if(!document.hidden&&!working.current&&!state.busy)setRevision(n=>n+1)},60000);return()=>clearInterval(timer)},[key,state.busy])
  async function more(){
   if(working.current||state.busy)return
   if(state.error)empty.current=0

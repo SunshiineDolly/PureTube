@@ -65,7 +65,7 @@ function usePages(command:'search_youtube'|'channel_videos',params:{query:string
    let active=true,working=false
    async function refresh(){
      const previous=recent.get(key)
-     if(!previous||working||Date.now()-(checked.get(key)??0)<120_000)return
+     if(!previous||working)return
      working=true
      try{
        const page=await load(null)
@@ -80,10 +80,7 @@ function usePages(command:'search_youtube'|'channel_videos',params:{query:string
      finally{working=false}
    }
    void refresh()
-   const timer=setInterval(()=>{if(!document.hidden)void refresh()},120_000)
-   const focus=()=>void refresh()
-   window.addEventListener('focus',focus)
-   return ()=>{active=false;clearInterval(timer);window.removeEventListener('focus',focus)}
+   return ()=>{active=false}
  },[key,load,enabled])
  const active:Load|undefined=state?.key===key?state:recent.has(key)?{key,page:recent.get(key)}:undefined
  const next=enabled?active?.page?.next:undefined

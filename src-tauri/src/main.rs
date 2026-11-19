@@ -89,7 +89,7 @@ fn save(app: tauri::AppHandle, state: State<AppData>, data: Value) -> Result<()>
     let show_tray = data
         .pointer("/settings/tray")
         .and_then(Value::as_bool)
-        .unwrap_or(false);
+        .unwrap_or(false) || data.pointer("/settings/closeToTray").and_then(Value::as_bool).unwrap_or(false);
     write(&state.db, data.clone())?;
     if let Some(recovery) = &state.recovery {
         if let Some(parent) = recovery.parent() { std::fs::create_dir_all(parent).map_err(|_| "Library saved, but its Documents backup folder is unavailable.")?; }
@@ -244,7 +244,6 @@ fn main() {
         downloads::download_list,
         downloads::download_video,
         downloads::preview_stream,
-        downloads::preview_stream,
         downloads::download_cancel,
         downloads::open_downloads,
         comments::video_comments,
@@ -298,7 +297,9 @@ fn main() {
             if window.label() != "main" {
                 return;
             }
-            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let keep=window.try_state::<AppData>().and_then(|state| read(&state.db).ok().flatten()).and_then(|v| v.pointer("/settings/closeToTray").and_then(Value::as_bool)).unwrap_or(false);
+                if keep { api.prevent_close(); let _=window.hide(); return; }
                 if let Some(state) = window.try_state::<downloads::Downloads>() {
                     state.shutdown();
                 }
@@ -359,6 +360,7 @@ fn main() {
             desktop::configure_tray(app)?;
             #[cfg(windows)]
             if let Some(main) = app.get_webview_window("main") {
+                if let Some(icon)=app.default_window_icon() { let _=main.set_icon(icon.clone()); }
                 main.set_decorations(false)?;
                 let video_app = app.handle().clone();
                 main.with_webview(move |webview| {
