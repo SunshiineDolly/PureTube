@@ -1,5 +1,5 @@
-import {useEffect,useRef,useState} from 'react'
-import {Users} from 'lucide-react'
+import {useEffect,useRef,useState,type RefObject} from 'react'
+import {Copy,Users,X} from 'lucide-react'
 import {errorText} from './domain'
 import {createConnection,decodeRoomCode,makeRoomCode,readRoomPlayback,type RoomPlayback} from './room-connection'
 export type {RoomPlayback} from './room-connection'
@@ -137,32 +137,44 @@ export function useWatchTogether(getPlayback:()=>RoomPlayback|undefined,activeId
  return {room,playback,busy,message,connected,host,join,accept,leave,cancelInvite}
 }
 
-export function WatchTogether({session,canHost}:{session:ReturnType<typeof useWatchTogether>;canHost:boolean}){
- const [input,setInput]=useState(''),[copied,setCopied]=useState('')
+export function WatchTogether({session,canHost,dialog}:{session:ReturnType<typeof useWatchTogether>;canHost:boolean;dialog:RefObject<HTMLDialogElement|null>}){
+ const [input,setInput]=useState(''),[copied,setCopied]=useState(''),[copyError,setCopyError]=useState(false)
  const {room,message,busy,connected}=session
- const copy=(code:string)=>void navigator.clipboard.writeText(code).then(()=>setCopied(code),()=>{})
- const field=(label:string,submit:(code:string)=>Promise<void>,button:string)=><form className="row" onSubmit={e=>{e.preventDefault();void submit(input.trim())}}>
-   <input aria-label={label} placeholder={label} value={input} maxLength={32000} onChange={e=>setInput(e.target.value)}/>
+ const copy=(code:string)=>void navigator.clipboard.writeText(code).then(()=>{setCopied(code);setCopyError(false)},()=>setCopyError(true))
+ const field=(label:string,submit:(code:string)=>Promise<void>,button:string)=><form className="room-code" onSubmit={e=>{e.preventDefault();void submit(input.trim())}}>
+   <label>{label}<input placeholder={label} value={input} maxLength={32000} onChange={e=>setInput(e.target.value)}/></label>
    <button className="button" disabled={busy||!input.trim()}>{button}</button>
  </form>
- const code=(value:string,label:string)=><><input aria-label={label} readOnly value={value} onFocus={e=>e.currentTarget.select()}/><button className="button accent" onClick={()=>copy(value)}>{copied===value?'Copied':'Copy '+label.toLowerCase()}</button></>
- return <details className="room-menu">
-   <summary className="button" title="Watch Together" aria-label="Watch Together"><Users size={17}/><span>{connected?'In room':'Watch Together'}</span></summary>
-   <section className="room-panel" aria-label="Watch Together">
-     <h2>Watch Together</h2>
-     {message&&<p role="status">{message}</p>}
+ const code=(value:string,label:string)=><div className="room-code">
+   <label>{label}<input readOnly value={value} onFocus={e=>e.currentTarget.select()}/></label>
+   <button className="button accent" onClick={()=>copy(value)}><Copy size={15}/>{copied===value?'Copied':'Copy'}</button>
+ </div>
+ const leave=()=>{setInput('');session.leave()}
+ return <dialog ref={dialog} className="room-panel" aria-labelledby="room-title" onClose={()=>setCopyError(false)}>
+   <header className="room-heading">
+     <span className="room-mark"><Users size={20}/></span>
+     <div><h2 id="room-title">Watch Together</h2><p>Sync a video with friends on Viddy.</p></div>
+     <button className="icon" aria-label="Close Watch Together" onClick={()=>dialog.current?.close()}><X size={18}/></button>
+   </header>
+   <section className="room-body">
+     {message&&<p className="room-status" role="status">{message}</p>}
+     {copyError&&<p className="room-status" role="status">Select the code and copy it manually.</p>}
      {room?.role==='host'?<>
        {connected>0&&<p>{connected} {connected===1?'guest':'guests'} connected. Your player controls the room.</p>}
-       {room.code?<><p>Send this invite to one friend, then paste the reply they send back.</p>{code(room.code,'Invite')}{field('Paste reply code',session.accept,'Connect')}<button className="button" disabled={busy} onClick={session.cancelInvite}>Cancel invite</button></>:<button className="button accent" disabled={busy} onClick={()=>{setInput('');void session.host()}}>Invite another guest</button>}
-       <button className="button" disabled={busy} onClick={()=>{setInput('');session.leave()}}>End room</button>
+       {room.code?<><p>Send the invite to a friend, then paste their reply to connect.</p>{code(room.code,'Invite code')}{field('Reply code',session.accept,'Connect')}</>:null}
+       <div className="room-footer">
+         {room.code?<button className="button" disabled={busy} onClick={session.cancelInvite}>Cancel invite</button>:<button className="button accent" disabled={busy} onClick={()=>{setInput('');void session.host()}}>Invite a guest</button>}
+         <button className="button" disabled={busy} onClick={leave}>End room</button>
+       </div>
      </>:room?<><p>{connected?'Following the host’s playback.':'Send this reply code back to the host to finish joining.'}</p>
        {!connected&&room.code&&code(room.code,'Reply code')}
-       <button className="button" onClick={()=>{setInput('');session.leave()}}>Leave room</button></>:<>
-       <p>Watch with friends on Viddy over the internet. The host controls playback.</p>
-       <button className="button accent" disabled={busy||!canHost} onClick={()=>{setInput('');void session.host()}}>{busy?'Preparing…':'Host this video'}</button>
-       {!canHost&&<p>Open a regular video to host.</p>}
-       {field('Paste invite',session.join,'Join')}
-     </>}
+       <div className="room-footer"><button className="button" onClick={leave}>Leave room</button></div>
+     </>:<div className="room-options">
+       <section><h3>Host a room</h3><p>{canHost?'Share an invite and control playback for your guests.':'Open a regular video to host.'}</p>
+       <button className="button accent" disabled={busy||!canHost} onClick={()=>{setInput('');void session.host()}}>{busy?'Preparing…':'Host this video'}</button></section>
+       <section><h3>Join a friend</h3><p>Paste their invite to create a reply code.</p>
+       {field('Invite code',session.join,'Join')}</section>
+     </div>}
    </section>
- </details>
+ </dialog>
 }

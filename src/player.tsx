@@ -6,7 +6,7 @@ type Player = {destroy():void;getCurrentTime():number;getDuration():number;getPl
 type Events = {onReady:()=>void;onError:(e:{data:number})=>void;onStateChange:(e:{data:number})=>void}
 declare global { interface Window { YT?:{Player:new (frame:HTMLIFrameElement, config:{events:Events})=>Player};onYouTubeIframeAPIReady?:()=>void } }
 let api:Promise<NonNullable<Window['YT']>>|undefined
-function playerApi() {
+export function playerApi() {
  return api??=new Promise((resolve,reject)=>{
    if(window.YT?.Player) {resolve(window.YT);return}
    const script=document.createElement('script')

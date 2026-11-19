@@ -70,18 +70,37 @@ try{
   })()`)
   assert.deepEqual(playback,{video:'aqz-KE-bpKQ',position:42,playing:false})
 
-  const resolution=await evaluate(`(async()=>{
-    const url=await window.__TAURI_INTERNALS__.invoke('preview_stream',{id:'aqz-KE-bpKQ'})
-    const video=document.createElement('video')
-    video.muted=true
-    video.playsInline=true
-    video.src=url
-    document.body.append(video)
-    await video.play()
-    return video.videoHeight
+  await evaluate(`(()=>{
+    document.querySelector('button[aria-label="Watch Together"]').click()
+    if(!document.querySelector('dialog.room-panel').open)throw Error('Room dialog did not open')
+    document.querySelector('button[aria-label="Close Watch Together"]').click()
+    const input=document.querySelector('.searchbar input')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'Big Buck Bunny 60fps')
+    input.dispatchEvent(new Event('input',{bubbles:true}))
   })()`)
-  assert.ok(resolution>=360,'A known public YouTube video should decode at 360p or better')
-  console.log(`WebView2 exchanged a room invite and playback state, and played a ${resolution}p YouTube preview.`)
+  await evaluate("document.querySelector('.searchbar').requestSubmit()")
+  const played=await evaluate(`(async()=>{
+    const until=Date.now()+22000
+    const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms))
+    const relevance=[...document.querySelectorAll('.search-banner button')].find(button=>button.textContent==='Relevance')
+    relevance?.click()
+    let button
+    while(Date.now()<until&&!button){
+      const results=document.querySelector('[aria-label="Matching videos"]')
+      button=results?.querySelector('[data-video-id="aqz-KE-bpKQ"] .video-thumbnail')
+      if(!button)await delay(300)
+    }
+    if(!button)return 'known search result unavailable'
+    button.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}))
+    while(Date.now()<until&&!button.querySelector('.thumbnail-preview[data-playing="true"]'))await delay(200)
+    const frame=button.querySelector('.thumbnail-preview[data-playing="true"] iframe')
+    if(!frame?.src.startsWith('https://www.youtube.com/embed/aqz-KE-bpKQ?'))return 'preview did not play'
+    button.dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:document.body}))
+    await delay(100)
+    return button.querySelector('iframe')?'preview did not stop':'played'
+  })()`)
+  assert.equal(played,'played')
+  console.log('Room code exchange passed, the Watch Together dialog opened, and the YouTube hover preview played and stopped on pointer exit.')
 }finally{
   socket?.close()
   if(child.exitCode===null)child.kill()
