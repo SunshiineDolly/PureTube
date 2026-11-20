@@ -6,6 +6,8 @@ mod desktop;
 mod audio_branding;
 mod downloads;
 mod original_player;
+#[cfg(target_os = "macos")]
+mod youtube_embed;
 mod popout;
 mod updates;
 mod youtube_search;
@@ -251,6 +253,8 @@ fn main() {
         downloads::download_cancel,
         downloads::open_downloads,
         comments::video_comments,
+        #[cfg(target_os = "macos")]
+        youtube_embed::youtube_embed_port,
         original_player::original_player,
         original_player::close_original_player,
         downloads::download_preferences,
@@ -336,6 +340,8 @@ fn main() {
         })
         .setup(move |app| {
             #[cfg(target_os = "macos")]
+            app.manage(youtube_embed::EmbedOrigin::default());
+            #[cfg(target_os = "macos")]
             for config in &app.config().app.windows {
                 tauri::WebviewWindowBuilder::from_config(app, config)?
                     .initialization_script_for_all_frames(include_str!("read-only-chat.js"))
@@ -401,6 +407,7 @@ fn main() {
                         | "search_youtube"
                         | "channel_videos"
                         | "watch_creator"
+                        | "youtube_embed_port"
                 );
             if invoke.message.webview_ref().label() != "main" && !mini {
                 invoke

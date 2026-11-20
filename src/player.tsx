@@ -1,3 +1,4 @@
+import {configureYouTubeFrame} from './youtube-embed'
 import {RefreshCw,Volume2,VolumeX} from 'lucide-react'
 import {useEffect,useRef,useState} from 'react'
 import {playbackClock} from './playback-clock'
@@ -40,10 +41,8 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
    frame.title='YouTube video player'
    frame.allow='autoplay; encrypted-media; fullscreen; picture-in-picture'
    frame.allowFullscreen=true
-   frame.referrerPolicy='strict-origin-when-cross-origin'
    const params=new URLSearchParams({autoplay:roomTarget.current?.playing===false?'0':'1',controls:'1',enablejsapi:'1',origin:location.origin,rel:'0',playsinline:'1'})
    if(!live&&initial.current>0)params.set('start',String(Math.floor(initial.current)))
-   frame.src='https://www.youtube.com/embed/'+id+'?'+params
    let closed=false, player:Player|undefined, ready=false, played=false, timed=0, lastPosition=-1
    const clock=playbackClock(performance.now())
    const count=(playing?:boolean)=>{
@@ -88,10 +87,13 @@ export function PlayerFrame({id,start,live=false,onSample,onPlay,onElapsed,onEnd
        }
      }
    }
-   host.appendChild(frame)
    const timer=setInterval(sample,1000)
-   playerApi().then(YT=>{
-     if(closed) return
+   void configureYouTubeFrame(frame,id,params).then(()=>{
+     if(closed)return
+     host.appendChild(frame)
+     return playerApi()
+   }).then(YT=>{
+     if(closed||!YT) return
      player=new YT.Player(frame,{events:{
        onReady:()=>{ready=true;volumePlayer.current=player;let initialVolume=player?.getVolume()??100;try{const saved=localStorage.getItem('viddy-volume');if(saved!==null&&Number.isFinite(Number(saved))){initialVolume=Math.max(0,Math.min(100,Number(saved)));player?.setVolume(initialVolume)}}catch{};setVolume(initialVolume);setMuted((player?.isMuted()??false)||initialVolume===0);sample();callbacks.current.onController?.(()=>player?.getCurrentTime()??0);if(roomTarget.current)syncRoom.current();else seekWhenReady.current()},
        onStateChange:e=>{

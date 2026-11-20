@@ -1,3 +1,4 @@
+import {configureYouTubeFrame} from './youtube-embed'
 import {useEffect,useRef,useState} from 'react'
 import {Play} from 'lucide-react'
 import type {Video} from './domain'
@@ -15,15 +16,16 @@ function YouTubePreview({id}:{id:string}){
    frame.title='Muted YouTube preview'
    frame.tabIndex=-1
    frame.allow='autoplay; encrypted-media'
-   frame.referrerPolicy='strict-origin-when-cross-origin'
    const params=new URLSearchParams({
      autoplay:'1',mute:'1',controls:'0',playsinline:'1',rel:'0',
      enablejsapi:'1',origin:location.origin,cc_load_policy:'0',
    })
-   frame.src='https://www.youtube.com/embed/'+id+'?'+params
-   host.appendChild(frame)
-   void playerApi().then(YT=>{
+   void configureYouTubeFrame(frame,id,params).then(()=>{
      if(disposed)return
+     host.appendChild(frame)
+     return playerApi()
+   }).then(YT=>{
+     if(disposed||!YT)return
      player=new YT.Player(frame,{events:{
        onReady:()=>{if(!disposed){player?.mute();player?.playVideo()}},
        onStateChange:({data})=>{
