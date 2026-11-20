@@ -15,7 +15,7 @@ import {RandomWatch} from './random-watch-button'
 import {Thumbnail} from './thumbnail'
 import {useFilteredVideos} from './filtered-videos'
 
-export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surface}){
+export function RecommendationFeed({shared,surface,active=true}:{shared:Shared;surface:Surface;active?:boolean}){
  const {feed,target,refresh,more,hasMore}=useRecommendations(surface,shared.data)
  const [topic,setTopic]=useState('All')
  const railTopics=['All','Gaming','Vlogs','Style & beauty','Fashion','Home & lifestyle','Music','Anime','Learning','Travel',...topics.map(t=>t.name).filter(name=>!['Gaming','Vlogs','Style & beauty','Fashion','Home & lifestyle','Music','Anime','Learning','Travel'].includes(name))]
@@ -37,8 +37,8 @@ export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surfa
    {surface==='home'&&<FollowedLiveShelf shared={shared}/>}
    <div className="row recommendation-toolbar"><p>{surface==='discover'?'Explore beyond your usual creators.':'A surprise shaped by what you watch.'}</p><div className="recommendation-actions">{topic==='All'&&<RandomWatch items={videos??[]} shared={shared} surface={surface}/>} {surface==='discover'&&<button className="button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16}/> New mix</button>}</div></div>
    {topic==='All'?<>
-   {!videos.length&&(feed?.busy||feedReserve.busy)?<Loading/>:videos.length?<section className="studio-shelf" aria-label="Recommended videos"><Grid shared={shared} items={videos} extra={recommendationReason}/></section>:feed?.error?<><Notice text={feed.error}/><button className="button" onClick={refresh}>Try again</button></>:<Empty title="Time for something new" detail="Refresh the mix for new topics and creators." action={<button className="button" onClick={refresh}>New mix</button>}/>}
-   <AutoMore enabled={hasMore} revision={feed?.sources.map(s=>s.next?.token??s.loaded).join()} busy={!!feed?.busy} error={feed?.moreError} onReach={()=>void more()}/></>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={[]} surface={surface}/>}
+   {!videos.length&&(!feed||feed.busy||feedReserve.busy)?<Loading/>:videos.length?<section className="studio-shelf" aria-label="Recommended videos"><Grid shared={shared} items={videos} extra={recommendationReason}/></section>:feed?.error?<><Notice text={feed.error}/><button className="button" onClick={refresh}>Try again</button></>:<Empty title="Time for something new" detail="Refresh the mix for new topics and creators." action={<button className="button" onClick={refresh}>New mix</button>}/>}
+   <AutoMore enabled={active&&hasMore} revision={feed?.sources.map(s=>s.next?.token??s.loaded).join()} busy={!!feed?.busy} error={feed?.moreError} onReach={()=>void more()}/></>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={[]} surface={surface} active={active}/>}
  </div>
 }
 
@@ -64,18 +64,18 @@ export function RecentFeed({shared,query='',home=false}:{shared:Shared;query?:st
  </section></div>
 }
 
-export function Discover({shared}:{shared:Shared}){
+export function Discover({shared,active=true}:{shared:Shared;active?:boolean}){
  const [picked,setPicked]=useState('For you')
  const ordered=topics
  const topic=picked
  const homeCreators=starterIds
  return <div className="studio-discover discover-page"><Heading label="" title="Discover" detail="Find your next favorite creator."/>
  <CategoryRail names={['For you',...ordered.map(t=>t.name)]} selected={topic} onSelect={setPicked}/>
- {topic==='For you'?<RecommendationFeed shared={shared} surface="discover"/>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={homeCreators}/>}
+ {topic==='For you'?<RecommendationFeed shared={shared} surface="discover" active={active}/>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={homeCreators} active={active}/>}
  </div>
 }
 
-function TopicCatalog({topic,shared,exclude,surface="discover"}:{topic:string;shared:Shared;exclude:readonly string[];surface?:Surface}){
+function TopicCatalog({topic,shared,exclude,surface="discover",active=true}:{topic:string;shared:Shared;exclude:readonly string[];surface?:Surface;active?:boolean}){
  const catalog=useCatalog(topicQuery(topic),'latest')
  const skipped=new Set(exclude)
  const homeIds=recommendationIds('home')
@@ -94,6 +94,6 @@ function TopicCatalog({topic,shared,exclude,surface="discover"}:{topic:string;sh
        </div>
      </article>
      {checked.length>1&&<><div className="starter-heading"><h2>More in {topic}</h2><span className="meta">Newest first</span></div><Grid shared={shared} items={checked.slice(1)}/></>}</>:!catalog.hasMore?<Empty title="No additional results" detail="Try another topic or search for something more specific."/>:null}
-   <AutoMore enabled={catalog.hasMore} revision={catalog.cursor} busy={catalog.loadingMore} error={catalog.moreError} onReach={catalog.more}/>
+   <AutoMore enabled={active&&catalog.hasMore} revision={catalog.cursor} busy={catalog.loadingMore} error={catalog.moreError} onReach={catalog.more}/>
  </section>
 }

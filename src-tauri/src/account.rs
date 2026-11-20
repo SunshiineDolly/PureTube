@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use tauri::{async_runtime::Mutex, State};
 
 #[derive(Default)]
-pub struct Account(Mutex<Option<Session>>, Mutex<Option<Pending>>);
+pub struct Account(Mutex<Option<Session>>, Mutex<Option<Pending>>, Mutex<Option<String>>);
 
 struct Pending {
     email: String,
@@ -19,6 +19,8 @@ struct Pending {
 pub struct Identity {
     id: String,
     email: String,
+    #[serde(default)]
+    private_key: bool,
 }
 
 #[derive(Deserialize)]
@@ -62,6 +64,71 @@ pub fn account_configured() -> bool {
 }
 
 #[tauri::command]
+pub fn account_generate_key() -> Result<String> {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    let mut entropy = [0u8; 32];
+    getrandom::fill(&mut entropy).map_err(|_| "Could not generate a private account key.")?;
+    Ok(format!("viddy_{}", URL_SAFE_NO_PAD.encode(entropy)))
+}
+
+async fn private_rpc<T: serde::de::DeserializeOwned>(
+    app: &AppData, key: &str, action: &str, expected: Option<u32>,
+    snapshot: Option<Value>, access: Option<&str>,
+) -> Result<T> {
+    if key.len() != 49 || !key.strip_prefix("viddy_").is_some_and(|part|
+        part.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))) {
+        return Err("Enter your complete Viddy account key.".into());
+    }
+    let mut request = request(app, reqwest::Method::POST, "/rest/v1/rpc/viddy_private_account")?;
+    if let Some(access) = access {
+        request = request.bearer_auth(access);
+    }
+    let response = request.json(&json!({"action":action,"account_key":key,"expected":expected,"snapshot":snapshot}))
+        .send().await.map_err(|_| "Could not reach Viddy account sync.")?;
+    if !response.status().is_success() {
+        let detail: Value = response.json().await.unwrap_or_default();
+        return Err(match detail["code"].as_str() {
+            Some("42501") => "That key could not open a Viddy account.",
+            Some("54000") => "Viddy has reached its free account capacity.",
+            Some("23505") if action == "attach" => "This account already has a private key.",
+            Some("22023") if action == "write" => "Your library exceeds the 2 MiB cloud limit. Your local library is still available.",
+            _ => "Viddy could not complete the account request. Try again later.",
+        }.into());
+    }
+    response.json().await.map_err(|_| "Viddy account sync returned an invalid response.".into())
+}
+
+#[tauri::command]
+pub async fn account_use_key(
+    app: State<'_, AppData>, account: State<'_, Account>, key: String, action: String,
+) -> Result<SignIn> {
+    let mut private = account.2.lock().await;
+    let mut email = account.0.lock().await;
+    if private.is_some() || !matches!(action.as_str(), "create" | "identify" | "attach") ||
+        (email.is_some() != (action == "attach")) {
+        return Err("Sign out before opening another account.".into());
+    }
+    if action == "create" {
+        let _guard = app.library_guard.lock().map_err(|_| "Library is busy.")?;
+        let conn = database(&app.db)?;
+        sync_table(&conn)?;
+        if conn.query_row("SELECT EXISTS(SELECT 1 FROM account_sync WHERE slot = 1)", [], |row| row.get::<_, bool>(0))
+            .map_err(|_| "Could not check the existing account.")? {
+            return Err("This local library is already linked. Sign in to that account first.".into());
+        }
+    }
+    let access = email.as_ref().map(|session| session.tokens.access_token.as_str());
+    let id: String = private_rpc(&app, key.trim(), &action, None, None, access).await?;
+    let base = {
+        let _guard = app.library_guard.lock().map_err(|_| "Library is busy.")?;
+        bind(&database(&app.db)?, &id)?
+    };
+    *email = None;
+    *private = Some(key.trim().to_owned());
+    Ok(SignIn { identity: Identity { id, email: String::new(), private_key: true }, base })
+}
+
+#[tauri::command]
 pub async fn account_send_code(app: State<'_, AppData>, account: State<'_, Account>, email: String) -> Result<()> {
     let email = email.trim();
     if email.len() > 254 || !email.contains('@') {
@@ -71,7 +138,7 @@ pub async fn account_send_code(app: State<'_, AppData>, account: State<'_, Accou
     let callback = Callback::start()?;
     let response = request(&app, reqwest::Method::POST, "/auth/v1/otp")?
         .query(&[("redirect_to", &callback.redirect)])
-        .json(&json!({"email":email,"create_user":true,"code_challenge":callback.challenge(),"code_challenge_method":"s256"}))
+        .json(&json!({"email":email,"create_user":false,"code_challenge":callback.challenge(),"code_challenge_method":"s256"}))
         .send().await.map_err(|_| "Could not reach the account service.")?;
     match response.status().as_u16() {
         200..=299 => {
@@ -225,6 +292,9 @@ pub struct Snapshot {
 
 #[tauri::command]
 pub async fn account_read(app: State<'_, AppData>, account: State<'_, Account>, known_revision: Option<u32>) -> Result<Option<Snapshot>> {
+    if let Some(key) = account.2.lock().await.as_deref() {
+        return private_rpc(&app, key, "read", known_revision, None, None).await;
+    }
     let mut active = account.0.lock().await;
     let mut query = authorized(&app, &mut active, reqwest::Method::GET, "/rest/v1/viddy_library?select=revision,data&limit=1").await?;
     if let Some(revision) = known_revision {
@@ -241,6 +311,9 @@ pub async fn account_write(app: State<'_, AppData>, account: State<'_, Account>,
     if data.get("version").and_then(Value::as_u64) != Some(1) || data.to_string().len() > MAX_LIBRARY {
         return Err("The library format or size is unsupported.".into());
     }
+    if let Some(key) = account.2.lock().await.as_deref() {
+        return private_rpc(&app, key, "write", Some(revision), Some(data), None).await;
+    }
     let mut active = account.0.lock().await;
     let response = authorized(&app, &mut active, reqwest::Method::POST, "/rest/v1/rpc/viddy_write_library").await?
         .json(&json!({"expected":revision,"snapshot":data}))
@@ -251,6 +324,7 @@ pub async fn account_write(app: State<'_, AppData>, account: State<'_, Account>,
 
 #[tauri::command]
 pub async fn account_sign_out(account: State<'_, Account>) -> Result<()> {
+    *account.2.lock().await = None;
     *account.0.lock().await = None;
     Ok(())
 }

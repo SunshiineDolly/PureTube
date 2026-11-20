@@ -58,6 +58,11 @@ function App() {
  const {data,ready,failed,error,change,setting,read}=useLibrary(), s=data.settings
  const account=useAccount(ready,read,change)
  const [route,setRoute]=useState<Route>({name:'home'}), routes=useRef<{route:Route;text:string;scroll:number}[]>([])
+ const [visitedDiscover,setVisitedDiscover]=useState(false)
+ useEffect(()=>{
+   if(route.name==='discover')setVisitedDiscover(true)
+ },[route.name])
+
  const restoreScroll=useRef(0)
  const routeRef=useRef(route);routeRef.current=route
  const [notice,setNotice]=useState(''),[reminder,setReminder]=useState('')
@@ -110,8 +115,6 @@ function App() {
    }
  },[updateSettingsRequest,route])
  function go(next:Route) {
-   if(next.name==='watch'&&route.name==='watch'&&next.video.id===route.video.id)return
-   if(next.name==='channel'&&route.name==='channel'&&next.id===route.id&&next.tab===route.tab)return
    if(next.name==='watch'&&route.name==='watch'&&next.video.id===route.video.id)return
    if(next.name==='channel'&&route.name==='channel'&&next.id===route.id)return
    if(next.name===route.name&&next.name!=='search'&&next.name!=='watch'&&next.name!=='channel')return
@@ -207,9 +210,12 @@ function App() {
  {error&&<Notice text={error}/>}
  {reminder&&<div className="notice row" role="status"><div className="grow">{reminder}</div><button className="icon small" aria-label="Dismiss reminder" onClick={()=>setReminder('')}><X size={15}/></button></div>}
  {liveAlerts.alerts.map(({id,title})=><div className="notice row wrap" role="status" key={id}><div className="grow"><strong>Now live:</strong> {title}</div><button className="button accent" onClick={()=>{liveAlerts.dismiss(id);go({name:'watch',video:{...linkVideo(id),title,live:true}})}}>Watch live</button><button className="icon small" aria-label="Dismiss live reminder" onClick={()=>liveAlerts.dismiss(id)}><X size={15}/></button></div>)}
+ {ready&&!failed&&<>
+  <div hidden={route.name!=='home'}><RecommendationFeed shared={shared} surface="home" active={route.name==='home'}/></div>
+  {(visitedDiscover||route.name==='discover')&&<div hidden={route.name!=='discover'}><Discover shared={shared} active={route.name==='discover'}/></div>}
+ </>}
  {failed?<Empty title="Could not load your local library" detail="Restart Viddy after checking your app data permissions."/>:!ready?<Loading/>:
- route.name==='home'?<RecommendationFeed shared={shared} surface="home"/>:
- route.name==='discover'?<Discover shared={shared}/>:
+ route.name==='home'||route.name==='discover'?null:
  route.name==='following'?<Quiet shared={shared}/>:
  route.name==='live'?<SearchPage key="live" shared={shared} query="lofi radio" liveOnly liveQuery={route.query} mode={route.mode} onLiveQuery={query=>setRoute({...route,query})} onMode={mode=>setRoute({...route,mode})}/>:
  route.name==='search'?<SearchPage key={route.query} shared={shared} query={route.query} selectedSource={route.source} onSourceChange={source=>setRoute({...route,source})}/>:

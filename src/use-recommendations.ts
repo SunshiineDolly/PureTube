@@ -47,6 +47,7 @@ export function useRecommendations(surface:Surface,data:Library){
  useEffect(()=>{
    loadExposures()
    const cached=sessions.get(surface)
+   if (!iteration && cached && !cached.busy && !cached.error) return
    let active=true
    const run=++generation.current
    const seed=(cached?.seed??Math.floor(Date.now()/1000))+1
@@ -59,24 +60,20 @@ export function useRecommendations(surface:Surface,data:Library){
    if(iteration>0)prior.forEach(id=>{seen[id]=Date.now()})
    const sources:Source[]=plan.map(p=>({...p,next:null,loaded:false}))
    store({items:cached?.items??[],sources,seed,at:Date.now(),busy:true})
-   let pending=plan.length,successes=0
-   const pool:Video[]=[]
-   for(const [index,source] of plan.entries()){
-     void requestCatalog(source.query,source.filter,null,iteration>0).then(page=>{
-       if(!active||generation.current!==run)return
-       successes++;sources[index]={...source,next:page.next,loaded:true}
-       pool.push(...page.items.map(v=>({...v,category:source.topic})))
-       const items=rankRecommendations(pool,current.current,seen,seed,other(),surface==='home'?72:96,surface)
-       // Keep already-visible cards in place while the other requests finish.
-       const displayed=successes===1?[]:sessionRef.current?.items??[]
-       store({items:appendRecommendations(displayed,items,surface==='home'?96:144),sources:[...sources],seed,at:Date.now(),busy:pending>1})
-     },error=>{
-       if(active&&generation.current===run&&successes===0)store({...sessionRef.current!,error:errorText(error),busy:pending>1})
-     }).finally(()=>{
-       pending--
-       if(active&&generation.current===run&&pending===0)store({...sessionRef.current!,items:successes?rankRecommendations(pool,current.current,seen,seed,other(),surface==='home'?96:144,surface):sessionRef.current!.items,busy:false,error:successes?undefined:sessionRef.current?.error})
+   void Promise.allSettled(plan.map(source => requestCatalog(source.query, source.filter, null, iteration > 0))).then(results => {
+     if (!active || generation.current !== run) return
+     const pool:Video[]=[]
+     let success=false,error:string|undefined
+     results.forEach((result,index)=>{
+       if(result.status==='rejected'){error??=errorText(result.reason);return}
+       success=true
+       const source=sources[index]
+       sources[index]={...source,next:result.value.next,loaded:true}
+       pool.push(...result.value.items.map(video=>({...video,category:source.topic})))
      })
-   }
+     store({items:success?rankRecommendations(pool,current.current,seen,seed,other(),surface==='home'?96:144,surface):cached?.items??[],
+       sources,seed,at:Date.now(),busy:false,error:success?undefined:error})
+   })
    return ()=>{active=false;generation.current++}
  },[surface,iteration])
  const activeFeed=feed

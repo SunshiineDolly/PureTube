@@ -265,6 +265,8 @@ fn main() {
         #[cfg(target_os = "macos")]
         youtube_embed::youtube_embed_port,
         account::account_configured,
+        account::account_generate_key,
+        account::account_use_key,
         account::account_send_code,
         account::account_poll,
         account::account_cancel,

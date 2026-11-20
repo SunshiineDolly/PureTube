@@ -27,11 +27,10 @@ export function requestCatalog(query:string,filter:CatalogFilter,cursor:Cursor|n
 }
 type Load={key:string;page?:Page;error?:string;moreError?:string;loadingMore?:boolean}
 const recent=new Map<string,Page>()
-const checked=new Map<string,number>()
 function remember(key:string,page:Page){
  recent.delete(key)
  recent.set(key,page)
- if(recent.size>25){const oldest=recent.keys().next();if(!oldest.done){recent.delete(oldest.value);checked.delete(oldest.value)}}
+ if(recent.size>25){const oldest=recent.keys().next();if(!oldest.done){recent.delete(oldest.value)}}
 }
 
 function usePages(command:'search_youtube'|'channel_videos',params:{query:string;filter:CatalogFilter}|{id:string;tab:string},enabled:boolean){
@@ -55,32 +54,9 @@ function usePages(command:'search_youtube'|'channel_videos',params:{query:string
    request.then(page=>{
      if(generation.current!==current)return
      remember(key,page)
-     if(!cached)checked.set(key,Date.now())
      setState({key,page})
    },error=>{if(generation.current===current)setState({key,error:errorText(error)})})
    return ()=>{generation.current++}
- },[key,load,enabled])
- useEffect(()=>{
-   if(!enabled)return
-   let active=true,working=false
-   async function refresh(){
-     const previous=recent.get(key)
-     if(!previous||working)return
-     working=true
-     try{
-       const page=await load(null)
-       if(!active)return
-       // Refresh metadata/new arrivals while keeping already-loaded results
-       // and their continuation so Back and scrolling retain their place.
-       const old=recent.get(key)??previous
-       const freshIds=new Set(page.items.map(v=>v.id))
-       const combined={items:[...page.items,...old.items.filter(v=>!freshIds.has(v.id))],next:old.next??page.next}
-       remember(key,combined);checked.set(key,Date.now());setState({key,page:combined})
-     }catch{/* Keep the last successful result set during a failed background refresh. */}
-     finally{working=false}
-   }
-   void refresh()
-   return ()=>{active=false}
  },[key,load,enabled])
  const active:Load|undefined=state?.key===key?state:recent.has(key)?{key,page:recent.get(key)}:undefined
  const next=enabled?active?.page?.next:undefined

@@ -4,7 +4,7 @@ import {errorText} from './domain'
 import {cloudLibrary, emptyCloudLibrary, mergeCloudLibrary, readCloudLibrary, sameCloudLibrary, sameVideo, type CloudLibrary} from './account-library'
 import type {Library} from './library'
 
-type Identity = {id: string; email: string}
+type Identity = {id: string; email: string; private_key?: boolean}
 type Snapshot = {revision: number; data: unknown}
 type Binding = {id: string; base: CloudLibrary}
 type SignIn = {identity: Identity; base: unknown}
@@ -156,7 +156,11 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
    })
  }
 
- return {configured, user, busy, message, problem, pendingEmail, sendEmail, cancelEmail, verify, signOut, syncNow}
+ function useKey(key: string, action: 'create' | 'identify' | 'attach') {
+   return run(async () => acceptSignIn(await invoke<SignIn>('account_use_key', {key, action})))
+ }
+
+ return {configured, user, busy, message, problem, pendingEmail, sendEmail, cancelEmail, verify, signOut, syncNow, useKey}
 }
 
 export type ViddyAccount = ReturnType<typeof useAccount>

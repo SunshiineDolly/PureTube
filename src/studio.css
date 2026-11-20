@@ -466,3 +466,15 @@
 .content::-webkit-scrollbar-thumb,.sidebar::-webkit-scrollbar-thumb{background-color:color-mix(in srgb,var(--sub) 65%,transparent)}
 .content::-webkit-scrollbar-thumb:hover,.sidebar::-webkit-scrollbar-thumb:hover{background-color:var(--a)}
 @media(max-width:960px){.friends-layout{grid-template-columns:1fr}}
+
+/* Keep the browse columns aligned when the window and scrollbars resize. */
+.app > .top{grid-row:1;grid-column:1/-1}
+.app > .sidebar{grid-row:2;grid-column:1;min-height:0}
+.app > .content{grid-row:2;grid-column:2;min-height:0;scrollbar-gutter:stable both-edges}
+.app > .top{padding-inline:clamp(12px,1.3vw,24px)}
+.app > .top .header-actions{justify-self:end}
+@media(min-width:1450px){
+ .app > .top{grid-template-columns:minmax(270px,1fr) minmax(0,700px) minmax(270px,1fr)}
+ .app > .top .header-center{padding-inline:0}
+}
+.studio-discover .video-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))}
