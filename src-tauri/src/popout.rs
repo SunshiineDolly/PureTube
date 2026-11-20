@@ -51,10 +51,12 @@ pub async fn open_player(
     .min_inner_size(360., 260.)
     .resizable(true)
     .always_on_top(false)
+    .initialization_script_for_all_frames(include_str!("read-only-chat.js"))
     .build()
     .map_err(|_| "Could not open the mini player.")?;
     #[cfg(windows)]
     let video_app = app.clone();
+    #[cfg(windows)]
     window
         .with_webview(move |view| {
             let _ = crate::desktop::configure_youtube_identity(view, Some(Box::new(move |id| { let _ = video_app.emit_to("player", "embedded-video", id); })));

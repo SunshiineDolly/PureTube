@@ -159,6 +159,7 @@ struct Tool {
     sha256: String,
     files: Vec<ToolFile>,
 }
+#[cfg(not(target_os = "macos"))]
 fn prepare(
     app: &tauri::AppHandle,
     state: &Downloads,
@@ -285,6 +286,35 @@ fn prepare(
         for file in &tool.files {
             executables.insert(file.name.clone(), dir.join(&file.name));
         }
+    }
+    Ok(executables)
+}
+// Finder launches do not inherit a shell's Homebrew PATH. Resolve helpers from
+// the standard Apple Silicon and Intel prefixes, without downloading Windows binaries.
+#[cfg(target_os = "macos")]
+fn prepare(
+    _app: &tauri::AppHandle,
+    state: &Downloads,
+    id: &str,
+    include_ffmpeg: bool,
+) -> Result<HashMap<String, PathBuf>> {
+    if state.stopped(id) { return Err("Cancelled".into()); }
+    let names: &[&str] = if include_ffmpeg {
+        &["yt-dlp", "deno", "ffmpeg", "ffprobe"]
+    } else {
+        &["yt-dlp", "deno"]
+    };
+    let mut executables = HashMap::new();
+    for name in names {
+        let path = ["/opt/homebrew/bin", "/usr/local/bin"].iter()
+            .map(|prefix| Path::new(prefix).join(name))
+            .find(|path| {
+                use std::os::unix::fs::PermissionsExt;
+                path.metadata().is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+            })
+            .ok_or("Downloads on Mac require Homebrew helpers. In Terminal, run: brew install yt-dlp deno ffmpeg. Then retry.")?;
+        // Keep the common download pipeline's lookup keys compatible with Windows.
+        executables.insert(format!("{name}.exe"), path);
     }
     Ok(executables)
 }

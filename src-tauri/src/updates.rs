@@ -27,6 +27,11 @@ fn safe_endpoint(endpoint: &str) -> Option<Url> {
     Some(url)
 }
 pub fn config() -> Option<(&'static str, Url)> {
+    // The public release feed currently contains Windows installers only.
+    // Mac test builds opt in only when a Mac update endpoint is supplied.
+    if cfg!(target_os = "macos") && ENDPOINT.is_none() {
+        return None;
+    }
     let key = PUBLIC_KEY
         .unwrap_or(include_str!("../updater-public-key.pub"))
         .trim();

@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react'
+import {isMac} from './platform'
 import {invoke} from '@tauri-apps/api/core'
 import {Palette,Shield,Monitor,Download,Upload,Trash2,PlaySquare,RefreshCw} from 'lucide-react'
 import {errorText} from './domain'
@@ -32,7 +33,7 @@ export function Preferences({data,setting,change,updates}:{data:Library;setting:
  <button className="button" onClick={()=>{resetRecommendationMemory();change(d=>({...d,interests:{},viewing:{},tasteResetAt:Date.now(),dismissed:[]}));setMessage('Recommendation preferences reset.')}}>Reset recommendations</button>
  <button className="button" onClick={()=>{if(confirm('Clear all saved playback positions?'))change(d=>({...d,progress:{}}))}}>Clear progress</button>
  <button className="button danger" onClick={()=>{if(confirm('Reset the local library and all preferences?')){resetRecommendationMemory();change(()=>empty())}}}>Reset local data</button></div></section>
- <section><h2><Monitor/> Desktop</h2><Toggle label="Launch on Windows startup" value={autostart} onChange={v=>void action(async()=>setAutostart(await invoke<boolean>('startup',{enabled:v})))}/>{toggle('tray','Minimize to the system tray')}{toggle('closeToTray','Keep Viddy running in the background when closed')}<p>Viddy remembers the window's position and size. Pin it from the Start Menu or taskbar. Install a newer trusted release to update.</p></section>
+ <section><h2><Monitor/> Desktop</h2><Toggle label={isMac?"Launch at login":"Launch on Windows startup"} value={autostart} onChange={v=>void action(async()=>setAutostart(await invoke<boolean>('startup',{enabled:v})))}/>{toggle('tray',isMac?'Minimize to the menu bar':'Minimize to the system tray')}{toggle('closeToTray','Keep Viddy running in the background when closed')}<p>Viddy remembers the window's position and size. {isMac?'Keep it in the Dock from its Dock menu.':'Pin it from the Start Menu or taskbar.'} Install a newer trusted release to update.</p></section>
  <section id="app-updates"><h2><RefreshCw/> App updates</h2>
  {updates.version&&<p className="meta">Viddy {updates.version}{updates.lastChecked?' · Checked '+new Date(updates.lastChecked).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):''}</p>}
  <p role="status">{updates.message|| (updates.configured===false?'Updates are unavailable in this test build.':updates.busy==='installing'?updates.progress?.event==='installing'?'Installing the update. Viddy will restart automatically.':updates.progress?.event==='verifying'?'Verifying the update signature...':updates.progress?.event==='downloading'&&updates.progress.total?'Downloading update · '+Math.min(100,Math.round(updates.progress.downloaded/updates.progress.total*100))+'%':'Downloading the signed update...':updates.busy==='checking'?'Checking for updates...':updates.release?'Viddy '+updates.release.version+' is ready to install.':updates.release===null?'You’re up to date.':'Viddy checks for updates automatically.')}</p>

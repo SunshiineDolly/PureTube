@@ -4,6 +4,8 @@ Viddy (formerly PureTube) is a Windows desktop app for watching recent uploads f
 
 [Download the latest Windows version](https://github.com/SunshiineDolly/Viddy/releases/latest) · [All releases](https://github.com/SunshiineDolly/Viddy/releases)
 
+A macOS test build of Viddy 0.22.3 is configured for Apple Silicon and Intel Macs on macOS 14+. The **Build Viddy for Mac** GitHub Actions workflow produces a universal `.dmg`. See [Mac installation, build instructions, and testing checklist](docs/MACOS-TESTING.md). Mac playback still needs validation on hardware.
+
 ## Install and start
 
 1. Download the latest **Viddy_*_x64-setup.exe** from GitHub Releases and run it. It installs for the current Windows user. Start Menu integration is automatic, and you can pin the running app to the taskbar.

@@ -260,6 +260,11 @@ fn main() {
         downloads::download_remove,
         downloads::download_clear_finished
     ];
+    #[cfg(target_os = "macos")]
+    for window in &mut context.config_mut().app.windows {
+        // Build explicitly in setup so the chat guard also runs in WKWebView frames.
+        window.create = false;
+    }
     let builder = tauri::Builder::default();
     #[cfg(windows)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -330,6 +335,13 @@ fn main() {
             }
         })
         .setup(move |app| {
+            #[cfg(target_os = "macos")]
+            for config in &app.config().app.windows {
+                tauri::WebviewWindowBuilder::from_config(app, config)?
+                    .initialization_script_for_all_frames(include_str!("read-only-chat.js"))
+                    .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
+                    .build()?;
+            }
             let isolated = profile.is_some();
             let dir = match profile {
                 Some(dir) if dir.is_absolute() => dir,

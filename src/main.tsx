@@ -1,4 +1,5 @@
 import {BrandIntro} from './brand-intro'
+import {isMac} from './platform'
 import {Watch} from './watch'
 import {applyPalette} from './palettes'
 import {createRoot} from 'react-dom/client'
@@ -92,7 +93,7 @@ function App() {
  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),2600);return()=>clearTimeout(timer)},[notice])
  useEffect(()=>{
    const key=(e:KeyboardEvent)=>{
-     if(e.key.toLowerCase()==='k'&&e.ctrlKey){e.preventDefault();searchRef.current?.focus()}
+     if(e.key.toLowerCase()==='k'&&(isMac?e.metaKey:e.ctrlKey)){e.preventDefault();searchRef.current?.focus()}
    }
    window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)
  },[])
@@ -204,7 +205,7 @@ function App() {
  {error&&<Notice text={error}/>}
  {reminder&&<div className="notice row" role="status"><div className="grow">{reminder}</div><button className="icon small" aria-label="Dismiss reminder" onClick={()=>setReminder('')}><X size={15}/></button></div>}
  {liveAlerts.alerts.map(({id,title})=><div className="notice row wrap" role="status" key={id}><div className="grow"><strong>Now live:</strong> {title}</div><button className="button accent" onClick={()=>{liveAlerts.dismiss(id);go({name:'watch',video:{...linkVideo(id),title,live:true}})}}>Watch live</button><button className="icon small" aria-label="Dismiss live reminder" onClick={()=>liveAlerts.dismiss(id)}><X size={15}/></button></div>)}
- {failed?<Empty title="Could not load your local library" detail="Restart Viddy after checking your Windows app data permissions."/>:!ready?<Loading/>:
+ {failed?<Empty title="Could not load your local library" detail="Restart Viddy after checking your app data permissions."/>:!ready?<Loading/>:
  route.name==='home'?<RecommendationFeed shared={shared} surface="home"/>:
  route.name==='discover'?<Discover shared={shared}/>:
  route.name==='following'?<Quiet shared={shared}/>:

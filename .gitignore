@@ -1,8 +1,10 @@
 node_modules/
 dist/
+artifacts/
 target/
 *.log
 src-tauri/gen/
+src-tauri/icons/macos/
 client_secret*.json
 .env
 .env.*
