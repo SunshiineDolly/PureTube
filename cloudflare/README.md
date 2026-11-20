@@ -6,7 +6,7 @@ Use the Cloudflare Workers Free plan and D1 Free plan. The prepared service URL 
 2. Deploy worker.mjs as the viddy-sync Worker. Bind the database as DB.
 3. Set the plaintext variable DISCORD_CLIENT_ID to 1573479904048054412. Set DISCORD_CLIENT_SECRET as a Cloudflare encrypted secret, entered directly in the dashboard. Never put it in Git, the desktop build, chat, or a plaintext variable.
 4. In the Viddy Discord application’s OAuth2 settings, register exactly https://viddy-sync.sunshiinedolly.workers.dev/oauth/discord/callback. Leave Public Client off: the Worker performs the confidential exchange. No bot permissions are needed.
-5. Disable Worker request logs/traces before live sign-in so OAuth URLs are not retained in application observability.
+5. Leave Worker logs enabled and turn off **Include Invocation logs** before live sign-in so automatic OAuth request URLs are not retained. Traces remain disabled. The checked-in configuration preserves these settings.
 6. Check GET /health returns discordConfigured true; test sign-in and library sync on two isolated devices/profiles, restart persistence, offline behavior, logout, and unauthorized requests before shipping.
 
 The checked-in wrangler.jsonc contains public identifiers only. The same source can be deployed with Wrangler after an authorized Cloudflare login: wrangler deploy --config cloudflare/wrangler.jsonc. Do not create broad API tokens as a shortcut. Local SQLite tests use synthetic identities and no network: node --test cloudflare/worker.test.mjs.
