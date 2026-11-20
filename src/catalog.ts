@@ -110,7 +110,7 @@ function usePages(command:'search_youtube'|'channel_videos',params:{query:string
    }).finally(()=>{if(generation.current===current)inFlight.current=false})
  },[next,key,load])
  return {items:active?.page?.items,error:active?.error,moreError:active?.moreError,hasMore:!!next,
-   loadingMore:!!active?.loadingMore,more,reload:()=>retry(n=>n+1)}
+   loadingMore:!!active?.loadingMore,cursor:next?.token,more,reload:()=>retry(n=>n+1)}
 }
 
 export function useCatalog(query:string,filter:CatalogFilter,enabled=true){

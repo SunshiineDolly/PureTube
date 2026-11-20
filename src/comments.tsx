@@ -40,6 +40,6 @@ export function VideoComments({id,onChannel,onOriginal}:{id:string;onChannel:(id
  {page?.unavailable?<p className="comments-empty" role="status">{page.message}</p>:page?.items.length?<div className="comment-list">{page.items.map(comment=><CommentRow key={comment.id} comment={comment} id={id} onChannel={onChannel}/>)}</div>:page&&!busy?<p className="comments-empty">No public comments were returned for this video.</p>:null}
  {!!page?.message&&!page.unavailable&&<p className="meta" role="status">{page.message}</p>}
  {(error||page&&!page.items.length)&&<div className="comments-empty"><p role="status">{error}</p><div className="row wrap"><button className="button" disabled={busy} onClick={()=>setRetry(n=>n+1)}>Retry comments</button><button className="button" onClick={onOriginal}>Open YouTube comments</button></div></div>}
- {page&&<AutoMore enabled={!!page.next} busy={busy} error={error} onReach={()=>void more()}/>}
+ {page&&<AutoMore enabled={!!page.next} revision={page.next?.token} busy={busy} error={error} onReach={()=>void more()}/>}
  </section>
 }

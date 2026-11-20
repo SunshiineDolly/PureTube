@@ -56,7 +56,7 @@ export function Quiet({shared}:{shared:Shared}) {
  <span className="meta" role="status">{feeds.busy?'Checking for uploads...':checks.length?'Checked '+new Date(Math.max(...checks)).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):''}</span></div>
  {failed.length>0&&<Notice text={failed.length===1?failed[0].error+(stale?' Showing its last successful feed.':''):failed.length+' channels could not be refreshed.'+(stale?' Showing the last successful uploads where available.':'')}/>}
  {items.length?<Grid shared={shared} isNew items={items.slice(0,limit)}/>:feeds.busy?<Loading/>:<Empty title={failed.length===ids.length?'Feed unavailable':'No matching recent uploads'} detail={failed.length===ids.length?'Try Refresh when YouTube is reachable.':'Try a wider date range or change your content filters.'}/>}
- <AutoMore enabled={items.length>limit||archive.hasMore} busy={archive.busy} error={archive.error} onReach={()=>{if(items.length>limit)setLimit(n=>n+24);else void archive.more().then(()=>setLimit(n=>n+24))}}/></>}
+ <AutoMore enabled={items.length>limit||archive.hasMore} revision={limit} busy={archive.busy} error={archive.error} onReach={()=>{if(items.length>limit)setLimit(n=>n+24);else void archive.more().then(()=>setLimit(n=>n+24))}}/></>}
  </>
 }
 
@@ -122,12 +122,12 @@ export function ChannelPage({shared,id,tab='home',setTab}:{shared:Shared;id:stri
  </section>}
  <div className="creator-tabs" aria-label="Channel tabs">{([['home','Home'],['videos','Videos'],['streams','Past streams'],['about','About']] as const).map(([value,label])=><button aria-pressed={tab===value} key={value} onClick={()=>setTab(value)}>{label}</button>)}</div>
  {tab==='home'?(shelves.length?shelves.map(({title,videos},i)=><section className="studio-shelf" key={i}><h2>{title}</h2><Grid shared={shared} items={videos}/></section>):
-   !creator&&!profile.error?<Loading/>:feed?.videos.length?<section className="studio-shelf"><h2>Recent uploads</h2><Grid shared={shared} items={feed.videos.filter(v=>!v.live).slice(0,limit)}/><AutoMore enabled={feed.videos.length>limit} onReach={()=>setLimit(n=>n+18)}/></section>:
+   !creator&&!profile.error?<Loading/>:feed?.videos.length?<section className="studio-shelf"><h2>Recent uploads</h2><Grid shared={shared} items={feed.videos.filter(v=>!v.live).slice(0,limit)}/><AutoMore enabled={feed.videos.length>limit} revision={limit} onReach={()=>setLimit(n=>n+18)}/></section>:
    <Empty title="No featured videos" detail="Select Videos to see this creator’s public uploads."/>):
  tab==='about'?<div className="creator-about"><h2>About {title}</h2>{creator?.description?<p>{creator.description}</p>:<p>{profile.error??'No public description.'}</p>}</div>:
  <>{issue&&<><Notice text={issue}/><button className="button" onClick={publicTab.reload}>Try again</button></>}
  {items?.length?<Grid shared={shared} items={items}/>:!items&&!issue?<Loading/>:!issue&&!publicTab.hasMore?<Empty title="No public videos to show" detail="Try another channel tab or check your content filters."/>:null}
- <AutoMore enabled={publicTab.hasMore} busy={publicTab.loadingMore} error={publicTab.moreError} onReach={publicTab.more}/></>}
+ <AutoMore enabled={publicTab.hasMore} revision={publicTab.cursor} busy={publicTab.loadingMore} error={publicTab.moreError} onReach={publicTab.more}/></>}
  </section>
 }
 export function LibraryPage({shared,kind}:{shared:Shared;kind:'library'|'later'|'history'}) {
@@ -162,6 +162,6 @@ export function LibraryPage({shared,kind}:{shared:Shared;kind:'library'|'later'|
    const filtered=v&&!visible(v,data.settings)
    if(filtered)return null
    return <div key={id} className="list-row"><img className="list-thumb" src={v?.image||'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg'} alt="" loading="lazy"/><div className="grow"><button className="video-title" onClick={()=>watch(v??linkVideo(id))}>{v?.title||(loading?'Loading video details…':'Saved video — details unavailable')}</button><div className="meta">{v?.channel||'YouTube video'}{kind==='history'&&data.progress[id]&&!v?.live?' · '+Math.round(100*data.progress[id].at/data.progress[id].duration)+'% watched':''}</div></div><div className="video-action-icons"><button className="icon" title="Add to queue" aria-label="Add to queue" onClick={()=>shared.enqueue(v??linkVideo(id))}><ListPlus size={16}/></button>{kind!=='later'&&<button className="icon" title="Watch later" aria-label="Watch later" aria-pressed={data.later.includes(id)} onClick={()=>change(d=>({...d,later:toggled(d.later,id)}))}><Bookmark size={16}/></button>}<button className="icon" title="Remove" aria-label="Remove video" onClick={()=>remove(id)}><X size={16}/></button></div></div>
- })}</div>{page.every(id=>{const v=loadedMap.get(id);return v&&!visible(v,data.settings)})&&<Empty title="Saved entries are hidden by your filters" detail="Change your filters in Settings to see these entries."/>}<AutoMore enabled={ids.length>limit} onReach={()=>setLimit(n=>n+24)}/></>}
+ })}</div>{page.every(id=>{const v=loadedMap.get(id);return v&&!visible(v,data.settings)})&&<Empty title="Saved entries are hidden by your filters" detail="Change your filters in Settings to see these entries."/>}<AutoMore enabled={ids.length>limit} revision={limit} onReach={()=>setLimit(n=>n+24)}/></>}
  </>
 }

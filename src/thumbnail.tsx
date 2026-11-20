@@ -62,7 +62,7 @@ export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatc
  },[v.id])
  return <button className="thumbnail video-thumbnail" aria-label={'Watch '+v.title} onClick={()=>{stop();onWatch(v)}} onMouseEnter={start} onMouseLeave={stop} onBlur={stop}>
    <span className="thumb-placeholder" aria-hidden="true"><Play size={21}/></span>
-   {v.image&&<img src={v.image} loading="lazy" alt=""/>}
+   {v.image&&<img src={v.image} loading="lazy" decoding="async" alt=""/>}
    {previewId===v.id&&<YouTubePreview key={v.id} id={v.id}/>}
    {v.duration>0&&<span className="duration">{clock(v.duration)}</span>}
    {v.live&&<span className="live-badge">Live</span>}

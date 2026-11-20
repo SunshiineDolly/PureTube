@@ -38,6 +38,6 @@ export function SearchPage({query,shared,liveOnly=false,selectedSource,onSourceC
     catalog.error?<><Notice text={catalog.error}/><button className="button" onClick={catalog.reload}>Try again</button></>:
     !matches?<Loading/>:<section className="studio-shelf" aria-label="Matching videos">
     {matches.length?<Grid shared={shared} items={matches} extra={source==='scheduled'?v=><ScheduledDetails video={v} data={shared.data} change={shared.change}/>:undefined}/>:!catalog.hasMore?<Empty title={source==='live'?'No live streams found':source==='scheduled'?'No scheduled streams found':'No matching videos'} detail="Try a different search or a different filter."/>:null}
-    <AutoMore enabled={catalog.hasMore} busy={catalog.loadingMore} error={catalog.moreError} onReach={catalog.more}/></section>}
+    <AutoMore enabled={catalog.hasMore} revision={catalog.cursor} busy={catalog.loadingMore} error={catalog.moreError} onReach={catalog.more}/></section>}
  </div>
 }

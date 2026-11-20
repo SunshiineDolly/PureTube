@@ -41,7 +41,7 @@ export function useLiveBrowse(mode:Mode,category:string,followIds:string[]){
  const actions=useRef({more:()=>{},refresh:()=>{}})
  useEffect(()=>{
    const sources=makeSources(mode,category,followedKey?followedKey.split(','):[])
-   let active=true,working=false,refreshIndex=0,moreIndex=0
+   let active=true,working=false,checkingSchedule=false,refreshIndex=0,moreIndex=0
    const statuses=new Map<string,{checked:number;remove:boolean;start?:number}>()
    const items=()=>{
      const now=Date.now()
@@ -79,18 +79,22 @@ export function useLiveBrowse(mode:Mode,category:string,followIds:string[]){
      source.loaded=true
    }
    async function updateSchedule(){
-     if(mode!=='scheduled'||!active)return
+     if(mode!=='scheduled'||!active||checkingSchedule)return
      const now=Date.now()
      const due=items().filter(v=>!v.scheduledAt||v.scheduledAt<=now+60_000)
        .filter(v=>now-(statuses.get(v.id)?.checked??0)>=(v.scheduledAt?25_000:180_000)).slice(0,5)
-     await Promise.all(due.map(async video=>{
-       const previous=statuses.get(video.id)
-       const result=await checkLive(video.id)
-       if(!active)return
-       const start=Date.parse(result.start??'')
-       statuses.set(video.id,{checked:now,remove:result.status==='live'||result.status==='ended',
-         start:result.status==='waiting'&&Number.isFinite(start)?start:previous?.start})
-     }))
+     if(!due.length)return
+     checkingSchedule=true
+     try{
+       await Promise.all(due.map(async video=>{
+         const previous=statuses.get(video.id)
+         const result=await checkLive(video.id)
+         if(!active)return
+         const start=Date.parse(result.start??'')
+         statuses.set(video.id,{checked:now,remove:result.status==='live'||result.status==='ended',
+           start:result.status==='waiting'&&Number.isFinite(start)?start:previous?.start})
+       }))
+     }finally{checkingSchedule=false}
    }
    async function batch(list:Source[],fresh:boolean){
      const results=await Promise.allSettled(list.map(source=>load(source,fresh)))
@@ -115,6 +119,7 @@ export function useLiveBrowse(mode:Mode,category:string,followIds:string[]){
      if(!active||working)return
      working=true
      if(initial)render(true)
+     let error=''
      try{
        const loaded=sources.filter(s=>s.loaded)
        const candidates=loaded.length?loaded:sources
@@ -125,10 +130,9 @@ export function useLiveBrowse(mode:Mode,category:string,followIds:string[]){
        const group=[...new Set([...hot,...rolling])].slice(0,size)
        refreshIndex+=group.length
        const worked=await batch(group,true)
-       render(false,!worked&&!items().length?'Could not refresh streams. Try again in a moment.':'')
-       await updateSchedule()
-       if(mode==='scheduled')render(false)
-     }finally{working=false}
+       if(!worked&&!items().length)error='Could not refresh streams. Try again in a moment.'
+       void updateSchedule().then(()=>{if(!working&&mode==='scheduled')render(false,error)},()=>{})
+     }finally{working=false;render(false,error)}
    }
    actions.current={more:()=>void more(),refresh:()=>void refresh()}
    void refresh(true)

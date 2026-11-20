@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useCallback,useState} from 'react'
 import {Play,RefreshCw} from 'lucide-react'
 import {AutoMore,Empty,Loading} from './components'
 import {Grid,Heading,Notice,type Shared} from './screens'
@@ -30,13 +30,15 @@ export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surfa
      .map(v=>({...v,category})))):[]
  const candidates=unique([...(feed?.items??[]),...reserveItems]).filter(v=>!shared.data.dismissed.includes(v.id)&&visible(v,filters)&&(surface!=='home'||!filters.history||!shared.data.history[v.id]))
  const videos=useFilteredVideos(candidates,filters,false)
+ const change=shared.change
+ const recommendationReason=useCallback((v:typeof videos[number])=><div className="recommendation-reason"><span>{v.category}</span><button title="Remove this recommendation" onClick={()=>change(d=>({...d,dismissed:[...new Set([...d.dismissed,v.id])].slice(-5000)}))}>Not interested</button></div>,[change])
  return <div className="studio-discover recommendations" ref={target}>
    {surface==='home'&&<div className="heading home-browse-heading"><h1 className="sr-only">Home</h1><CategoryRail names={railTopics} selected={topic} onSelect={setTopic}/><button className="button new-mix-button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16} className={feed?.busy?'spin':undefined}/> New mix</button></div>}
    {surface==='home'&&<FollowedLiveShelf shared={shared}/>}
    <div className="row recommendation-toolbar"><p>{surface==='discover'?'Explore beyond your usual creators.':'A surprise shaped by what you watch.'}</p><div className="recommendation-actions">{topic==='All'&&<RandomWatch items={videos??[]} shared={shared} surface={surface}/>} {surface==='discover'&&<button className="button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16}/> New mix</button>}</div></div>
    {topic==='All'?<>
-   {!videos.length&&(feed?.busy||feedReserve.busy)?<Loading/>:videos.length?<section className="studio-shelf" aria-label="Recommended videos"><Grid shared={shared} items={videos} extra={v=><div className="recommendation-reason"><span>{v.category}</span><button title="Remove this recommendation" onClick={()=>shared.change(d=>({...d,dismissed:[...new Set([...d.dismissed,v.id])].slice(-5000)}))}>Not interested</button></div>}/></section>:feed?.error?<><Notice text={feed.error}/><button className="button" onClick={refresh}>Try again</button></>:<Empty title="Time for something new" detail="Refresh the mix for new topics and creators." action={<button className="button" onClick={refresh}>New mix</button>}/>}
-   <AutoMore enabled={hasMore} busy={!!feed?.busy} error={feed?.moreError} onReach={()=>void more()}/></>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={[]} surface={surface}/>}
+   {!videos.length&&(feed?.busy||feedReserve.busy)?<Loading/>:videos.length?<section className="studio-shelf" aria-label="Recommended videos"><Grid shared={shared} items={videos} extra={recommendationReason}/></section>:feed?.error?<><Notice text={feed.error}/><button className="button" onClick={refresh}>Try again</button></>:<Empty title="Time for something new" detail="Refresh the mix for new topics and creators." action={<button className="button" onClick={refresh}>New mix</button>}/>}
+   <AutoMore enabled={hasMore} revision={feed?.sources.map(s=>s.next?.token??s.loaded).join()} busy={!!feed?.busy} error={feed?.moreError} onReach={()=>void more()}/></>:<TopicCatalog key={topic} topic={topic} shared={shared} exclude={[]} surface={surface}/>}
  </div>
 }
 
@@ -58,7 +60,7 @@ export function RecentFeed({shared,query='',home=false}:{shared:Shared;query?:st
  {home&&<FollowedLiveShelf shared={shared}/>}
  <section className="studio-shelf">{!home&&<div className="starter-heading"><h2>Matching recent uploads</h2></div>}
  {items.length?<Grid shared={shared} items={items.slice(0,limit)}/>:busy?<Loading/>:<Empty title="No matching recent uploads" detail={home?'Try Refresh or visit Discover for more to watch.':'Try another search.'}/>}
- <AutoMore enabled={items.length>limit} onReach={()=>setLimit(n=>n+24)}/>
+ <AutoMore enabled={items.length>limit} revision={limit} onReach={()=>setLimit(n=>n+24)}/>
  </section></div>
 }
 
@@ -92,6 +94,6 @@ function TopicCatalog({topic,shared,exclude,surface="discover"}:{topic:string;sh
        </div>
      </article>
      {checked.length>1&&<><div className="starter-heading"><h2>More in {topic}</h2><span className="meta">Newest first</span></div><Grid shared={shared} items={checked.slice(1)}/></>}</>:!catalog.hasMore?<Empty title="No additional results" detail="Try another topic or search for something more specific."/>:null}
-   <AutoMore enabled={catalog.hasMore} busy={catalog.loadingMore} error={catalog.moreError} onReach={catalog.more}/>
+   <AutoMore enabled={catalog.hasMore} revision={catalog.cursor} busy={catalog.loadingMore} error={catalog.moreError} onReach={catalog.more}/>
  </section>
 }

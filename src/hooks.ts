@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react'
+import {useCallback,useEffect,useRef,useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
 import {decode,empty,type Library,type Settings} from './library'
 import {errorText} from './domain'
@@ -10,7 +10,7 @@ export function useLibrary() {
    const initial=raw?decode(raw):empty()
    current.current=initial;setData(initial);setReady(true)
  }).catch(e=>{setError(errorText(e));setFailed(true)})},[])
- function change(fn:(previous:Library)=>Library) {
+ const change=useCallback((fn:(previous:Library)=>Library)=>{
    const next=fn(current.current);current.current=next;setData(next)
    queue.current=queue.current.then(()=>{
      // Multiple rapid updates share the latest snapshot rather than writing
@@ -18,7 +18,7 @@ export function useLibrary() {
      if(current.current!==next)return
      return invoke<void>('save',{data:next})
    }).then(()=>setError('')).catch(e=>setError(errorText(e)))
- }
+ },[])
  const setting=<K extends keyof Settings>(key:K,value:Settings[K])=>change(d=>({...d,settings:{...d.settings,[key]:value}}))
  return {data,ready,failed,error,change,setting}
 }
