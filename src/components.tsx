@@ -24,8 +24,8 @@ export function AutoMore({enabled,busy=false,onReach,error}:{enabled:boolean;bus
  if(!enabled&&!error)return null
  return <div className="more auto-more" ref={sentinel} data-scroll-sentinel role="status">{busy?<><LoaderCircle className="spin" size={16}/> Loading videos…</>:error?<><span>{error}</span><button className="button" onClick={onReach}>Try again</button></>:null}</div>
 }
-export function VideoGrid({items,onWatch,onChannel,progress,later,onSave,onQueue,checked,extra}:{items:Video[];onWatch:(v:Video)=>void;onChannel:(id:string)=>void;progress?:Record<string,{at:number;duration:number}>;later?:string[];onSave?:(id:string)=>void;onQueue?:(v:Video)=>void;checked?:Record<string,string>;extra?:(v:Video)=>React.ReactNode}) {
- return <div className="video-grid">{items.map(v=>{const owner=creditList(v)[0];return <article className="card" data-video-id={v.id} data-channel-id={v.channelId} key={v.id}>
+export function VideoGrid({items,onWatch,onChannel,progress,later,onSave,onQueue,checked,extra,gridRef}:{items:Video[];onWatch:(v:Video)=>void;onChannel:(id:string)=>void;progress?:Record<string,{at:number;duration:number}>;later?:string[];onSave?:(id:string)=>void;onQueue?:(v:Video)=>void;checked?:Record<string,string>;extra?:(v:Video)=>React.ReactNode;gridRef?:React.Ref<HTMLDivElement>}) {
+ return <div className="video-grid" ref={gridRef}>{items.map(v=>{const owner=creditList(v)[0];return <article className="card" data-video-id={v.id} data-channel-id={v.channelId} key={v.id}>
    <Thumbnail video={v} onWatch={onWatch} progress={progress?.[v.id]} checked={checked?.[v.channelId]}/>
    <div className="video-meta-row">{v.channel&&<CreatorAvatar id={owner?.id??v.channelId} name={owner?.name??v.channel} src={owner?.image||v.channelImage}/>}<div className="video-details">
     <div className="card-body"><button className="video-title" onClick={()=>onWatch(v)}>{v.title}</button>

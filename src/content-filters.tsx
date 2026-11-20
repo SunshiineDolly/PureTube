@@ -35,7 +35,7 @@ export function ContentFilters({settings,onKeywords,onBlocked}:{settings:Setting
  }
  return <section className="filter-settings">
    <h2><ShieldBan/> Content filters</h2>
-   <div className="filter-group"><h3>Words and phrases</h3><p>Hide videos when a match appears in the title or description.</p>
+   <div className="filter-group"><h3>Words and phrases</h3><p>Match whole words and phrases in titles and descriptions. Viddy checks full descriptions as they become available.</p>
    <form className="filter-input-row" onSubmit={e=>{
      e.preventDefault()
      const value=phrase.trim().replace(/\s+/g,' ')

@@ -4,10 +4,14 @@ import {channelId,errorText,type CreatorCredit,type Video} from './domain'
 
 type WatchCreator=CreatorCredit&{title:string;date:string;live:boolean;upcoming?:boolean;embeddable:boolean;description?:string;views?:string;duration?:number;storyboard?:string;subscribers?:string}
 const lookedUp=new Map<string,{task:Promise<WatchCreator>;expires:number}>()
+const verifying=new Map<string,Promise<WatchCreator>>()
 let background=Promise.resolve(),pausedUntil=0
 export function verifyVideoMetadata(id:string){
  const cached=lookedUp.get(id)
  if(cached&&cached.expires>Date.now())return cached.task
+ const same=verifying.get(id)
+ if(same)return same
+ if(Date.now()<pausedUntil)return Promise.reject(Error('YouTube is limiting metadata requests. Try again shortly.'))
  const task=background.then(async()=>{
    if(Date.now()<pausedUntil)throw Error('YouTube is limiting metadata requests. Try again shortly.')
    try{return await lookupCreator(id)}
@@ -16,6 +20,8 @@ export function verifyVideoMetadata(id:string){
      throw e
    }
  })
+ verifying.set(id,task)
+ void task.then(()=>verifying.delete(id),()=>verifying.delete(id))
  background=task.then(()=>{},()=>{}).then(()=>new Promise<void>(resolve=>setTimeout(resolve,425)))
  return task
 }

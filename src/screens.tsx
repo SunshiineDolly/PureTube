@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useRef,useState} from 'react'
 import {Plus, RefreshCw,ListPlus,Bookmark,X} from 'lucide-react'
 import {AutoMore,Empty,Loading,VideoGrid} from './components'
 import {errorText,fillCreator,publicNewest,unique,uploadAge,videoId,visible,type Video} from './domain'
@@ -18,8 +18,9 @@ import {useFilteredVideos} from './filtered-videos'
 export type Shared = {data:Library;change:(fn:(d:Library)=>Library)=>void;playNext:(v:Video)=>void;enqueue:(v:Video)=>void;playPlaylist:(name:string,ids:string[],index?:number,first?:Video)=>void;watch:(v:Video)=>void;channel:(id:string)=>void;follow:(id:string)=>void;subscriptions:()=>void;discover:()=>void;feeds:PublicFeeds;followIds:string[];live:FollowedLive}
 export function Grid({shared,items,isNew=false,extra}:{shared:Shared;items:Video[];isNew?:boolean;extra?:(v:Video)=>React.ReactNode}) {
  const {data,change,watch,channel}=shared
- const matches=useFilteredVideos(items,data.settings)
- return <VideoGrid onQueue={shared.enqueue} items={matches} extra={extra} onWatch={watch} onChannel={channel} progress={data.settings.progress?data.progress:undefined} later={data.later} checked={isNew?data.checked:undefined} onSave={id=>change(d=>{const video=matches.find(v=>v.id===id);return {...(video?rememberVideo(d,video):d),later:toggled(d.later,id)}})}/>
+ const viewport=useRef<HTMLDivElement>(null)
+ const matches=useFilteredVideos(items,data.settings,viewport)
+ return <VideoGrid gridRef={viewport} onQueue={shared.enqueue} items={matches} extra={extra} onWatch={watch} onChannel={channel} progress={data.settings.progress?data.progress:undefined} later={data.later} checked={isNew?data.checked:undefined} onSave={id=>change(d=>{const video=matches.find(v=>v.id===id);return {...(video?rememberVideo(d,video):d),later:toggled(d.later,id)}})}/>
 }
 export function Heading({label,title,detail,children}:{label:string;title:string;detail:string;children?:React.ReactNode}) {
  return <div className="heading"><div>{label&&<p className="eyebrow">{label}</p>}<h1>{title}</h1>{detail&&<p>{detail}</p>}</div>{children&&<div className="heading-actions">{children}</div>}</div>
@@ -149,7 +150,7 @@ export function LibraryPage({shared,kind}:{shared:Shared;kind:'library'|'later'|
      return {...d,progress:Object.fromEntries(Object.entries(d.progress).filter(([k])=>k!==id))}
    })
  }
- return <><Heading label="ON THIS DEVICE" title={kind==='library'?'Library':kind==='later'?'Watch Later':'History'} detail={kind==='history'?'Videos you have played in Viddy.':'Make a little room for the videos you want to keep.'}>{kind==='history'&&<button className="button" disabled={!Object.keys(data.history).length&&!Object.keys(data.progress).length} onClick={()=>{if(confirm('Clear all watched, unfinished and finished video history?'))change(d=>({...d,history:{},progress:{}}))}}>Clear history</button>}</Heading>
+ return <><Heading label="ON THIS DEVICE" title={kind==='library'?'Library':kind==='later'?'Watch Later':'History'} detail={kind==='history'?'Videos you have played in Viddy.':'Make a little room for the videos you want to keep.'}>{kind==='history'&&<button className="button" disabled={!Object.keys(data.history).length&&!Object.keys(data.progress).length} onClick={()=>{if(confirm('Clear all watched, unfinished and finished video history?'))change(d=>({...d,history:{},progress:{},viewing:{},interests:{}}))}}>Clear history</button>}</Heading>
  {kind==='history'&&<div className="history-tabs" role="group" aria-label="History view"><button aria-pressed={historyTab==='all'} onClick={()=>{setHistoryTab('all');setLimit(24)}}>All watched</button><button aria-pressed={unfinished} onClick={()=>{setHistoryTab('unfinished');setLimit(24)}}>Unfinished videos</button><button aria-pressed={historyTab==='finished'} onClick={()=>{setHistoryTab('finished');setLimit(24)}}>Finished videos</button></div>}
  {kind==='library'&&<div className="filter-row"><label>Shelf <select value={tab} onChange={e=>{setTab(e.target.value);setLimit(24)}}><option value="favorites">Favorites</option>{data.collections.map((c,i)=><option key={i} value={'collection:'+i}>{c.name}</option>)}</select></label>
  <form className="row" onSubmit={e=>{e.preventDefault();const title=name.trim();if(title&&!data.collections.some(c=>c.name===title)){const i=data.collections.length;change(d=>({...d,collections:[...d.collections,{name:title,ids:[]}]}));setName('');setTab('collection:'+i)}}}><input aria-label="New collection name" placeholder="New collection" maxLength={80} value={name} onChange={e=>setName(e.target.value)}/><button className="button" disabled={!name.trim()||data.collections.length>=200}><Plus size={16}/> Create</button></form>

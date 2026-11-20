@@ -1,4 +1,4 @@
-import {unique,visible,type Video} from './domain.ts'
+import {unique,uploadAge,visible,type Video} from './domain.ts'
 import {rankedTopics,topicQuery,topics,categoryFor} from './topics.ts'
 import type {Library} from './library.ts'
 
@@ -19,12 +19,49 @@ const alternatives:Record<string,string[]>={
  'Art & design':['artist studio creative process','sketchbook art tutorial','graphic design process'],
  'Vlogs':['weekend in my life vlog','daily life japan vlog','a day in my life'],
 }
+const genericWords=new Set('about after before best channel episode first from have here into latest like more most official part review series some than that their them then these things this today video videos vlog want watch what when where which while with world would your'.split(' '))
+function titleWords(title:string){
+ return [...new Set(title.normalize('NFKC').toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu)
+   ?.filter(word=>word.length>=3&&!/^\d+$/.test(word)&&!genericWords.has(word))??[])]
+}
+export const relatedQuery=(video:Video)=>titleWords(video.title).slice(0,7).join(' ')
+const creatorKey=(v:Video)=>v.channelId||v.channel.toLowerCase()
+
+export function viewingTaste(data:Library,now=Date.now()){
+ const categories:Record<string,number>={},creators:Record<string,number>={},terms:Record<string,number>={}
+ const examples:Video[]=[]
+ if(!data.settings.history)return {categories,creators,terms,examples}
+ const recent=Object.entries(data.history).filter(([id])=>data.savedVideos[id])
+   .sort(([a,x],[b,y])=>(data.viewing[b]?.at??y)-(data.viewing[a]?.at??x)).slice(0,60)
+ const engaged=recent.flatMap(([id,started])=>{
+   const video=data.savedVideos[id],watch=data.viewing[id]
+   const progress=data.settings.progress?data.progress[id]:undefined
+   const seconds=watch?.seconds??progress?.at??0,duration=progress?.duration||video.duration
+   const threshold=video.live?45:duration?Math.min(60,Math.max(12,duration*.18)):30
+   const lastWatched=watch?.at??progress?.updated??started
+   if(lastWatched<=(data.tasteResetAt??0)||seconds<threshold||data.dismissed.includes(id)||!visible(video,data.settings))return []
+   const age=Math.max(0,now-lastWatched)/86_400_000
+   const completion=!video.live&&duration>0?Math.min(1,seconds/duration):0
+   const weight=(1+completion+Math.min(1.5,seconds/480))*2**(-age/14)
+   return weight>=.2?[{video,weight}]:[]
+ }).sort((a,b)=>b.weight-a.weight).slice(0,24)
+ for(const {video,weight} of engaged){
+   const category=categoryFor(video),creator=creatorKey(video)
+   if(category)categories[category]=(categories[category]??0)+weight
+   if(creator)creators[creator]=(creators[creator]??0)+weight
+   for(const word of titleWords(video.title))terms[word]=(terms[word]??0)+weight
+   examples.push(video)
+ }
+ return {categories,creators,terms,examples}
+}
 export function recommendationPlan(data:Library,surface:Surface,seed:number){
- const ranked=rankedTopics(data.settings.history?data.interests:{})
- const preferred=surface==='discover'?[]:[...topics.filter(t=>data.preferredTopics.includes(t.name)),...(data.settings.history?ranked.filter(t=>(data.interests[t.name]??0)>0):[])].filter((t,i,a)=>a.findIndex(x=>x.name===t.name)===i).slice(0,10)
+ const taste=surface==='home'?viewingTaste(data):undefined
+ const scores=Object.fromEntries(topics.map(t=>[t.name,(taste?.categories[t.name]??0)*6+(data.preferredTopics.includes(t.name)?8:0)
+   +(data.settings.history?Math.min(data.interests[t.name]??0,6)*.4:0)]))
+ const preferred=surface==='discover'?[]:rankedTopics(scores).filter(t=>scores[t.name]>0)
  const shuffled=[...topics].sort((a,b)=>hash(surface+seed+a.name)-hash(surface+seed+b.name))
  const chosen=unique([
-   ...Array.from({length:Math.min(surface==='home'?2:1,preferred.length)},(_,i)=>{const t=preferred[(seed+i)%preferred.length];return {...t,id:t.name}}),
+   ...preferred.slice(0,3).map(t=>({...t,id:t.name})),
    ...shuffled.map(t=>({...t,id:t.name})),
  ]).slice(0,surface==='home'?6:8)
  const plan:{topic:string;query:string;filter:'all'|'latest'}[]=chosen.map((t,index)=>{
@@ -32,25 +69,35 @@ export function recommendationPlan(data:Library,surface:Surface,seed:number){
    return {topic:t.name,query:options[(seed+index)%options.length],filter:(index%2===0?'all':'latest') as 'all'|'latest'}
  })
  if(surface==='home'){
-  const remembered=Object.values(data.savedVideos).filter(v=>v.channel&&((data.settings.history&&data.history[v.id])||data.follows.includes(v.channelId))).sort((a,b)=>(data.history[b.id]??0)-(data.history[a.id]??0))
-  const creators=[...new Map(remembered.map(v=>[v.channelId||v.channel,v])).values()]
-  for(let i=0;i<Math.min(2,creators.length);i++){const v=creators[(seed+i)%creators.length];plan.push({topic:categoryFor(v)??'From creators you watch',query:v.channel+' latest videos',filter:'latest'})}
+  const remembered=[...taste!.examples,...Object.values(data.savedVideos).filter(v=>data.follows.includes(v.channelId))]
+  const creator=remembered.find(v=>v.channel&&v.channel!=='Creator'&&visible(v,data.settings))
+  if(creator)plan.push({topic:categoryFor(creator)??'From creators you watch',query:creator.channel+' latest videos',filter:'latest'})
+  const examples=taste!.examples.filter(v=>relatedQuery(v).split(' ').length>=2)
+  const example=examples.length?examples[seed%Math.min(3,examples.length)]:undefined
+  if(example)plan.push({topic:categoryFor(example)??'From your watch history',query:relatedQuery(example),filter:'all'})
  }
  return plan
 }
 
 export function rankRecommendations(items:Video[],data:Library,seen:Record<string,number>,seed:number,excluded:Set<string>,limit=48,surface:Surface='home'){
- const now=Date.now(),watched=data.settings.history?data.history:{}
- const candidates=unique(items).filter(v=>!v.live&&!v.scheduledAt&&!excluded.has(v.id)&&!data.dismissed.includes(v.id)&&!watched[v.id]&&!(data.settings.progress&&data.progress[v.id]?.at>0)&&visible(v,data.settings))
+ const now=Date.now(),personal=surface==='home',taste=personal?viewingTaste(data,now):undefined
+ const watched=personal&&data.settings.history?data.history:{}
+ const candidates=unique(items).filter(v=>!v.live&&!v.upcoming&&!v.scheduledAt&&!excluded.has(v.id)&&!data.dismissed.includes(v.id)&&!watched[v.id]&&!(personal&&data.settings.history&&data.settings.progress&&data.progress[v.id]?.at>0)&&visible(v,data.settings))
+ const affinities=new Map<string,number>()
  const score=(v:Video)=>{
    const exposure=seen[v.id]??0
    const penalty=exposure?Math.max(0,1-(now-exposure)/86_400_000)*1000:0
-   const affinity=surface==='discover'?0:(v.category&&data.preferredTopics.includes(v.category)?22:0)+(data.settings.history&&v.category?Math.min(data.interests[v.category]??0,15):0)
-   const label=v.publishedLabel?.toLowerCase()??''
-   const fresh=/\b(?:\d+\s*(?:h|hr|hour|d|day|w|wk|week)s?)\s+ago\b/.test(label)?18:0
-   return hash(seed+v.id)%35+affinity*2+fresh+Number(surface==='home'&&data.follows.includes(v.channelId))*25-penalty
+   const topic=categoryFor(v)??''
+   const relevance=!taste?0:Math.min(36,(taste.categories[topic]??0)*5)
+     +Math.min(34,(taste.creators[creatorKey(v)]??0)*8)
+     +Math.min(70,titleWords(v.title).reduce((sum,word)=>sum+Math.min(25,(taste.terms[word]??0)*9),0))
+     +(data.preferredTopics.includes(topic)?24:0)+(data.follows.includes(v.channelId)?22:0)
+     +(data.settings.history?Math.min(data.interests[topic]??0,8):0)
+   affinities.set(v.id,relevance)
+   return hash(seed+v.id)%19+relevance+Math.max(0,16-uploadAge(v)/86_400)-penalty
  }
- candidates.sort((a,b)=>score(b)-score(a))
+ const scores=new Map(candidates.map(v=>[v.id,score(v)]))
+ candidates.sort((a,b)=>scores.get(b.id)!-scores.get(a.id)!)
  const counts=new Map<string,number>(),titles=new Set<string>(),result:Video[]=[]
  for(const video of candidates){
    const creator=video.channelId||video.channel
@@ -59,10 +106,18 @@ export function rankRecommendations(items:Video[],data:Library,seen:Record<strin
    counts.set(creator,(counts.get(creator)??0)+1);titles.add(title);result.push(video)
    if(result.length>=limit)break
  }
- // Interleave topics so the first row doesn't consist of one genre.
+ if(personal&&result.some(v=>(affinities.get(v.id)??0)>=24)){
+   const output:Video[]=[]
+   while(result.length){
+     const index=output.length%4===3?result.findIndex(v=>(affinities.get(v.id)??0)<24&&now-(seen[v.id]??0)>=86_400_000):-1
+     output.push(...result.splice(Math.max(index,0),1))
+   }
+   return output
+ }
+ // On an untuned feed, alternate topics.
  const output:Video[]=[]
  while(result.length){
-   const index=result.findIndex(v=>!output.length||v.category!==output.at(-1)?.category)
+   const index=result.findIndex(v=>(!output.length||v.category!==output.at(-1)?.category)&&scores.get(result[0].id)!-scores.get(v.id)!<=24)
    output.push(...result.splice(index<0?0:index,1))
  }
  return output

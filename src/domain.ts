@@ -16,15 +16,28 @@ export function isShorts(title:string, description:string, duration:number) {
   return /(?:^|\s)#(?:youtubeshorts|shorts)\b/i.test(title)
     || (duration > 0 && duration <= 180 && /(?:^|\s)#(?:youtubeshorts|shorts)\b/i.test(description))
 }
+const filterText=(text:string)=>text.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim()
+const phrasePatterns=new Map<string,RegExp>()
+function phrasePattern(term:string){
+  let pattern=phrasePatterns.get(term)
+  if(pattern)return pattern
+  const literal=term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
+  const start=/^[\p{L}\p{N}\p{M}]/u.test(term)?'(?<![\\p{L}\\p{N}\\p{M}])':''
+  const end=/[\p{L}\p{N}\p{M}]$/u.test(term)?'(?![\\p{L}\\p{N}\\p{M}])':''
+  // Scripts without spaces use direct phrase matching.
+  pattern=new RegExp(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(term)?literal:start+literal+end,'u')
+  if(phrasePatterns.size>=512)phrasePatterns.delete(phrasePatterns.keys().next().value!)
+  phrasePatterns.set(term,pattern)
+  return pattern
+}
 export function visible(v:Video, f:Filters) {
-  const normalize=(text:string)=>text.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim()
-  const title=normalize(v.title),description=normalize(v.description)
-  return !v.shorts&&!v.paid&&!f.blocked.includes(v.channelId)
-    &&!v.creators?.some(creator=>f.blocked.includes(creator.id))
-    &&!f.keywords.some(keyword=>{
-      const term=normalize(keyword)
-      return term&&(title.includes(term)||description.includes(term))
-    })
+  if(v.shorts||v.paid||f.blocked.includes(v.channelId)||v.creators?.some(creator=>f.blocked.includes(creator.id)))return false
+  if(!f.keywords.length)return true
+  const title=filterText(v.title),description=filterText(v.description)
+  return !f.keywords.some(keyword=>{
+    const term=filterText(keyword)
+    return term&&(phrasePattern(term).test(title)||phrasePattern(term).test(description))
+  })
 }
 export const newest = (a:Video,b:Video) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id)
 const ageUnits:Record<string,number>={s:1,sec:1,second:1,m:60,min:60,minute:60,h:3600,hr:3600,hour:3600,d:86400,day:86400,w:604800,wk:604800,week:604800,mo:2592000,month:2592000,y:31536000,yr:31536000,year:31536000}

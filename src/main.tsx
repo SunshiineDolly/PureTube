@@ -17,10 +17,9 @@ import {PlayerFrame} from './player'
 import {useLibrary} from './hooks'
 import {videoId,channelId,errorText,visible,type Video} from './domain'
 import {linkVideo,parseVideo,usePublicFeeds} from './public-feeds'
-import {rememberVideo,toggled} from './library'
+import {recordViewing,rememberVideo,toggled} from './library'
 import {Discover,RecommendationFeed} from './discover'
 import {useUpdates} from './updates'
-import {categoryFor} from './topics'
 import {SearchPage,type SearchSource} from './search'
 import {LibraryStudio} from './library-studio'
 import type {PlaylistQueue} from './playlist-queue'
@@ -150,7 +149,7 @@ function App() {
    if(settings.reminder && old<settings.reminder*60 && old+elapsed>=settings.reminder*60)setReminder('You’ve reached your daily viewing reminder. Take a break whenever you’re ready.')
    change(d=>{
      const nextProgress=saveProgress?{...d.progress,[id]:{at:Math.min(duration,Math.max(0,position)),duration,updated:Date.now()}}:d.progress
-     return {...d,progress:nextProgress,daily:settings.reminder||settings.history?{date:today,seconds:(d.daily.date===today?d.daily.seconds:0)+elapsed}:d.daily}
+     return {...d,progress:nextProgress,viewing:recordViewing(d,id,elapsed),daily:settings.reminder||settings.history?{date:today,seconds:(d.daily.date===today?d.daily.seconds:0)+elapsed}:d.daily}
    })
  }
  useEffect(()=>{
@@ -165,7 +164,7 @@ function App() {
    }),
    listen<string>('embedded-video',({payload:id})=>{if(!videoId(id))return;const previous=routeRef.current;if(previous.name==='watch'&&previous.video.id===id)return;routes.current.push({route:previous,text:previous.name==='search'?previous.query:'',scroll:main.current?.scrollTop??0});setPlaylist(undefined);setPlaybackRun(n=>n+1);setActiveVideo(linkVideo(id));setRoute({name:'watch',video:linkVideo(id)})}),
    listen<{video:Video;position:number;duration:number;elapsed:number;started:boolean}>('player-sample',({payload:p})=>{
-    if(p.started&&dataRef.current.settings.history)change(d=>{const topic=categoryFor(p.video);return {...d,history:{...d.history,[p.video.id]:Date.now()},interests:topic?{...d.interests,[topic]:(d.interests[topic]??0)+1}:d.interests}})
+    if(p.started&&dataRef.current.settings.history)change(d=>({...rememberVideo(d,p.video),history:{...d.history,[p.video.id]:Date.now()}}))
     if(!p.started){noteSample(p.video.id,p.position,p.duration,p.elapsed,!!p.video.live);setSession(s=>s+p.elapsed);setFloating(old=>old?{...old,start:p.position}:old)}
    }),
    listen<Video>('player-video',({payload:video})=>{setFloating({video,start:0});setActiveVideo(video);setPlaylist(q=>q&&q.ids.includes(video.id)?{...q,index:q.ids.indexOf(video.id)}:undefined);setRoute(old=>old.name==='watch'?{name:'watch',video}:old)}),

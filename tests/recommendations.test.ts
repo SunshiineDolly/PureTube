@@ -1,8 +1,8 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {appendRecommendations,rankRecommendations,recommendationPlan} from '../src/recommendations.ts'
-import {empty} from '../src/library.ts'
-import type {Video} from '../src/domain.ts'
+import {appendRecommendations,rankRecommendations,recommendationPlan,viewingTaste} from '../src/recommendations.ts'
+import {decode,empty,recordViewing} from '../src/library.ts'
+import {visible,type Video} from '../src/domain.ts'
 
 const video=(n:number,creator='creator-'+n):Video=>({
  id:String(n).padStart(11,'0'),title:'Video '+n,description:'',channelId:creator,channel:creator,date:'',image:'',duration:120,category:n%2?'Gaming':'Food',shorts:false,paid:false,embeddable:true,
@@ -54,4 +54,35 @@ test('turning off history also stops using retained interests to select query so
 
 test('Home combines learned topics and known followed creators with exploration',()=>{
  const data=empty();data.interests.Gaming=12;data.interests.Food=10;const saved=video(80,'followed');saved.channel='Creator I follow';data.follows=['followed'];data.savedVideos[saved.id]=saved;const plan=recommendationPlan(data,'home',104);assert.ok(plan.some(s=>s.query.includes(saved.channel)));assert.ok(plan.some(s=>s.topic==='Gaming'));assert.ok(plan.some(s=>s.topic==='Food'));assert.ok(plan.length>=5)
+})
+
+test('Home learns a specific subject from real watch time and keeps Discover independent',()=>{
+ const data=empty(),now=Date.now()
+ const watched={...video(91),title:'Stardew Valley greenhouse layouts'}
+ const skipped={...video(92),title:'French pastry techniques'}
+ data.settings.progress=false
+ for(const v of [watched,skipped]){data.savedVideos[v.id]=v;data.history[v.id]=now}
+ data.viewing=recordViewing(data,watched.id,70,now)
+ data.viewing=recordViewing(data,skipped.id,4,now)
+ const loaded=decode(data)
+ assert.deepEqual(viewingTaste(loaded,now).examples.map(v=>v.id),[watched.id])
+ assert.ok(recommendationPlan(loaded,'home',11).some(s=>s.query.includes('stardew valley')))
+ const related={...video(93),title:'Stardew Valley greenhouse upgrades'}
+ const unrelated={...video(95),title:'Minecraft survival challenge'}
+ const items=[skipped,watched,unrelated,related]
+ assert.equal(rankRecommendations(items,loaded,{},11,new Set())[0].id,related.id)
+ assert.deepEqual(rankRecommendations(items,loaded,{},11,new Set(),48,'discover'),rankRecommendations(items,empty(),{},11,new Set(),48,'discover'))
+ loaded.tasteResetAt=now
+ assert.deepEqual(viewingTaste(loaded,now).examples,[])
+})
+
+test('phrase filters match titles and descriptions without hiding unrelated substrings',()=>{
+ const f={keywords:['cat','rage bait','C++','広告'],blocked:['blocked']}
+ const base=video(99)
+ assert.equal(visible({...base,title:'Wildcat habitats'},f),true)
+ assert.equal(visible({...base,title:'Cat-shaped candles'},f),false)
+ assert.equal(visible({...base,description:'About RAGE\n BAIT.'},f),false)
+ assert.equal(visible({...base,title:'C++ for beginners'},f),false)
+ assert.equal(visible({...base,title:'広告なし動画'},f),false)
+ assert.equal(visible({...base,creators:[{id:'blocked',name:'Guest'}]},f),false)
 })

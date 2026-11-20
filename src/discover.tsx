@@ -28,8 +28,8 @@ export function RecommendationFeed({shared,surface}:{shared:Shared;surface:Surfa
  const reserveItems=filters.keywords.length?mixByTopic(reserve.map(({id,category})=>
    (feedReserve.states[id]?.feed?.videos??[]).filter(v=>v.metadataComplete&&!v.live&&!alreadyLive.has(v.id)).slice(0,8)
      .map(v=>({...v,category})))):[]
- const candidates=unique([...(feed?.items??[]),...reserveItems]).filter(v=>!shared.data.dismissed.includes(v.id)&&visible(v,filters)&&(!filters.history||!shared.data.history[v.id]))
- const videos=useFilteredVideos(candidates,filters)
+ const candidates=unique([...(feed?.items??[]),...reserveItems]).filter(v=>!shared.data.dismissed.includes(v.id)&&visible(v,filters)&&(surface!=='home'||!filters.history||!shared.data.history[v.id]))
+ const videos=useFilteredVideos(candidates,filters,false)
  return <div className="studio-discover recommendations" ref={target}>
    {surface==='home'&&<div className="heading home-browse-heading"><h1 className="sr-only">Home</h1><CategoryRail names={railTopics} selected={topic} onSelect={setTopic}/><button className="button new-mix-button" disabled={feed?.busy} onClick={refresh}><RefreshCw size={16} className={feed?.busy?'spin':undefined}/> New mix</button></div>}
    {surface==='home'&&<FollowedLiveShelf shared={shared}/>}

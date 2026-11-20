@@ -4,7 +4,7 @@ import {errorText,type Video} from './domain'
 import {appendRecommendations,recommendationPlan,rankRecommendations,type Surface} from './recommendations'
 import type {Library} from './library'
 
-type Source={topic:string;query:string;filter:'all'|'latest';next:CatalogPage['next']}
+type Source={topic:string;query:string;filter:'all'|'latest';next:CatalogPage['next'];loaded:boolean}
 type Feed={items:Video[];sources:Source[];seed:number;at:number;error?:string;busy:boolean;moreError?:string}
 const sessions=new Map<Surface,Feed>()
 export const recommendationIds=(surface:Surface)=>new Set(sessions.get(surface)?.items.map(v=>v.id)??[])
@@ -57,14 +57,14 @@ export function useRecommendations(surface:Surface,data:Library){
    // A manual refresh should not immediately return the previous screen,
    // even if the pointer never intersected its cards.
    if(iteration>0)prior.forEach(id=>{seen[id]=Date.now()})
-   const sources:Source[]=plan.map(p=>({...p,next:null}))
+   const sources:Source[]=plan.map(p=>({...p,next:null,loaded:false}))
    store({items:cached?.items??[],sources,seed,at:Date.now(),busy:true})
    let pending=plan.length,successes=0
    const pool:Video[]=[]
    for(const [index,source] of plan.entries()){
      void requestCatalog(source.query,source.filter,null,iteration>0).then(page=>{
        if(!active||generation.current!==run)return
-       successes++;sources[index]={...source,next:page.next}
+       successes++;sources[index]={...source,next:page.next,loaded:true}
        pool.push(...page.items.map(v=>({...v,category:source.topic})))
        const items=rankRecommendations(pool,current.current,seen,seed,other(),surface==='home'?72:96,surface)
        // Keep already-visible cards in place while the other requests finish.
@@ -83,14 +83,14 @@ export function useRecommendations(surface:Surface,data:Library){
  async function more(){
    if(working.current||!activeFeed||activeFeed.busy)return
    const order=activeFeed.sources.map((_,i)=>(nextSource.current+i)%activeFeed.sources.length)
-   let sourceIndex=order.find(i=>activeFeed.sources[i].next)??-1
+   let sourceIndex=order.find(i=>!activeFeed.sources[i].loaded||activeFeed.sources[i].next)??-1
    let base=activeFeed
    if(sourceIndex<0){
      const seed=activeFeed.seed+1
-     const fresh=recommendationPlan(current.current,surface,seed).map(source=>({...source,next:null}))
+     const fresh=recommendationPlan(current.current,surface,seed).map(source=>({...source,next:null,loaded:false}))
      base={...activeFeed,seed,sources:fresh};sourceIndex=0
    }
-   nextSource.current=(sourceIndex+1)%activeFeed.sources.length
+   nextSource.current=(sourceIndex+1)%base.sources.length
    const source=base.sources[sourceIndex]
    working.current=true
    const run=generation.current
@@ -109,7 +109,7 @@ export function useRecommendations(surface:Surface,data:Library){
      if(generation.current!==run)return
      const latest=sessionRef.current!
      const sources=[...latest.sources]
-     sources[sourceIndex]={...source,next:page.next?.token===source.next?.token?null:page.next}
+     sources[sourceIndex]={...source,loaded:true,next:page.next?.token===source.next?.token?null:page.next}
      const items=appendRecommendations(latest.items,candidates)
      emptyBatches.current=items.length===latest.items.length?emptyBatches.current+1:0
      store({...latest,items,sources,busy:false,moreError:emptyBatches.current>=4?'No new matches in this mix. Choose another category or try a new mix.':undefined})

@@ -6,6 +6,7 @@ import {invoke} from '@tauri-apps/api/core'
 import {requestCatalog,requestChannel,type CatalogPage} from './catalog'
 import {nextVideos} from './autoplay'
 import {categoryFor,topicQuery,rankedTopics,topics} from './topics'
+import {relatedQuery,viewingTaste} from './recommendations'
 import {fillCreator,errorText,type Video} from './domain'
 import type {Library} from './library'
 import {AutoMore,day} from './components'
@@ -20,8 +21,9 @@ export function useUpNext(current:Video,data:Library,followed:Video[]=[],played:
   const run=++generation.current;setFound([]);related.current=[];sources.current=[];working.current=false;offset.current=0;empty.current=0;fallback.current=0;order.current=[];setPages(0);setError('')
   if(!current.id||current.title==='YouTube video')return
   playedThisSession.add(current.id);setBusy(true)
-  const topic=categoryFor(current),learned=data.settings.history?rankedTopics(data.interests).filter(t=>data.interests[t.name]>0).map(t=>t.name):[]
-  const queries=[topic?topicQuery(topic):(current.channel+' '+current.title).slice(0,140),topicQuery(data.preferredTopics[0]??learned[0]??topic??'Documentaries')]
+  const topic=categoryFor(current),taste=viewingTaste(data),learned=rankedTopics(taste.categories).find(t=>taste.categories[t.name]>0)?.name
+  const exact=relatedQuery(current)
+  const queries=[exact,topicQuery(topic??learned??data.preferredTopics[0]??'Documentaries')].filter(Boolean)
   const initial:Source[]=[...new Set(queries)].map(query=>({query,next:null}))
   if(current.channelId)initial.push({channel:current.channelId,next:null})
   const other=data.follows.filter(id=>id!==current.channelId);if(other.length)initial.push({channel:other[Math.floor(Date.now()/300000)%other.length],next:null})
@@ -57,7 +59,8 @@ export function useUpNext(current:Video,data:Library,followed:Video[]=[],played:
 export function UpNext({videos:items,filters,autoplay,ended,onToggle,onWatch,onQueue,queued=[],onMore,busy=false,error='',queueActive=false,pages=0}:{pages?:number;queueActive?:boolean;queued?:string[];onQueue?:(v:Video)=>void;onMore?:()=>Promise<void>;busy?:boolean;error?:string;videos:Video[];filters?:Filters;autoplay:boolean;ended:boolean;onToggle:()=>void;onWatch:(v:Video)=>void}){
  const [limit,setLimit]=useState(8)
  const [cancelled,setCancelled]=useState(false),[seconds,setSeconds]=useState(8)
- const videos=useFilteredVideos(items,filters??{keywords:[],blocked:[]})
+ const viewport=useRef<HTMLElement>(null)
+ const videos=useFilteredVideos(items,filters??{keywords:[],blocked:[]},viewport,limit)
  const next=videos[0]
  useEffect(()=>{setSeconds(8);setCancelled(false)},[ended,next?.id,autoplay])
  useEffect(()=>{
@@ -65,7 +68,7 @@ export function UpNext({videos:items,filters,autoplay,ended,onToggle,onWatch,onQ
   if(seconds===0){onWatch(next);return}
   const timer=setTimeout(()=>setSeconds(n=>n-1),1000);return()=>clearTimeout(timer)
  },[ended,autoplay,cancelled,next?.id,seconds])
- return <section className="up-next" aria-label="Up next" data-continuation-pages={pages}><div className="row"><h2>Up next</h2>{queueActive?<span className="meta">Queue plays first</span>:<button className="autoplay-switch" role="switch" aria-checked={autoplay} aria-label="Autoplay" title={autoplay?'Turn autoplay off':'Turn autoplay on'} onClick={onToggle}><span/>Autoplay</button>}</div>
+ return <section ref={viewport} className="up-next" aria-label="Up next" data-continuation-pages={pages}><div className="row"><h2>Up next</h2>{queueActive?<span className="meta">Queue plays first</span>:<button className="autoplay-switch" role="switch" aria-checked={autoplay} aria-label="Autoplay" title={autoplay?'Turn autoplay off':'Turn autoplay on'} onClick={onToggle}><span/>Autoplay</button>}</div>
  {ended&&autoplay&&!cancelled&&next&&<div className="autoplay-countdown" role="status"><span>Playing next in {seconds}s</span><button className="button" onClick={()=>onWatch(next)}><Play size={14}/> Play now</button><button className="icon" aria-label="Cancel autoplay" onClick={()=>setCancelled(true)}><X size={17}/></button></div>}
  <div className="up-next-list">{videos.slice(0,limit).map(v=><div className="up-next-item" key={v.id} data-video-id={v.id}><button className="up-next-card" onClick={()=>onWatch(v)}><img src={v.image} alt="" loading="lazy"/><span><strong>{v.title}</strong><small>{v.channel}</small><small>{[v.views,day(v.date)||v.publishedLabel].filter(Boolean).join(' · ')}</small></span></button>{onQueue&&<button className="icon small up-next-queue" aria-label={queued.includes(v.id)?v.title+' is queued':'Add '+v.title+' to queue'} title={queued.includes(v.id)?'Queued':'Add to queue'} disabled={queued.includes(v.id)} onClick={()=>onQueue(v)}>{queued.includes(v.id)?<Check size={15}/>:<ListPlus size={15}/>}</button>}</div>)}</div>
  {!next&&<p className="meta">{busy?'Finding unwatched videos…':'Scroll for more unwatched videos.'}</p>}

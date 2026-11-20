@@ -14,7 +14,6 @@ import {ScheduledDetails,useScheduledStatus} from './live'
 import {LiveChat} from './live-chat'
 import {Empty,day} from './components'
 import {Notice,type Shared} from './screens'
-import {categoryFor} from './topics'
 import {rememberVideo,toggled} from './library'
 import {errorText,visible,type Video} from './domain'
 type Props={onShareFriend:(video:Video)=>void;onOpenRoom:()=>void;roomPlayback?:RoomPlayback;inRoom:boolean;onRoomController:(read:()=>RoomPlayback|undefined)=>void;playlist?:PlaylistQueue;onQueueChange:(queue:PlaylistQueue|undefined)=>void;onQueueWatch:(index:number)=>void;onQueueClose:()=>void;onQueueRepeat:()=>void;docked?:boolean;onRestore:()=>void;onStop:()=>void;video:Video;shared:Shared;theater:boolean;setTheater:(v:boolean)=>void;onSample:(id:string,p:number,d:number,t:number,live?:boolean)=>void;onElapsed:(seconds:number)=>void;popped:boolean;returned?:number;onPopout:(video:Video,start:number)=>Promise<void>}
@@ -34,7 +33,7 @@ export function Watch({onShareFriend,onOpenRoom,roomPlayback,inRoom,onRoomContro
  const openedFallback=useRef(false)
  const next=useUpNext(video,data,Object.values(shared.feeds.states).flatMap(s=>s.feed?.videos??[]).filter(v=>!Object.values(shared.live.states).some(s=>!s.error&&s.video?.id===v.id)))
  useEffect(()=>{if(uploader&&data.settings.history)change(d=>rememberVideo(d,video))},[uploader?.id,uploader?.title,uploader?.date])
- function played(){if(data.settings.history)change(d=>{const topic=categoryFor(video);return {...rememberVideo(d,video),history:{...d.history,[v.id]:Date.now()},interests:topic?{...d.interests,[topic]:(d.interests[topic]??0)+1}:d.interests}})}
+ function played(){if(data.settings.history)change(d=>({...rememberVideo(d,video),history:{...d.history,[v.id]:Date.now()}}))}
   async function original(comments=false){
    setOpening(true);setMessage('')
    try{await invoke('original_player',{id:v.id,dark:data.settings.theme==='dark',comments});if(!comments)setMessage('Opened YouTube playback in Viddy.')}
@@ -47,8 +46,11 @@ export function Watch({onShareFriend,onOpenRoom,roomPlayback,inRoom,onRoomContro
    void original()
  },[restricted,docked,popped,inRoom])
  if(!visible(video,data.settings))return <Empty title="Video hidden" detail="This video matches one of your content filters."/>
- if((data.settings.keywords.length&&!video.metadataComplete||data.settings.blocked.length&&!video.channelId)&&!uploader){
-   return <Empty title={checked.loading?'Checking content filters':'Video details could not be verified'} detail="Viddy checks the creator and full description when content filters are active."/>
+ if(data.settings.blocked.length&&!video.channelId){
+   return <Empty title={checked.loading?'Checking content filters':'Creator could not be verified'} detail="Viddy checks the creator when channel filters are active."/>
+ }
+ if(data.settings.keywords.length&&!video.metadataComplete&&checked.loading){
+   return <Empty title="Checking content filters" detail="Checking the full video description."/>
  }
  const later=data.later.includes(v.id),fav=data.favorites.includes(v.id),progress=data.settings.progress?data.progress[v.id]:undefined
  const start=roomPlayback?.video===v.id?roomPlayback.position:returned??(progress&&progress.at<progress.duration-5?progress.at:0)
