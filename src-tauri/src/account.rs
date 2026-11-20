@@ -1,3 +1,4 @@
+use crate::account_callback::Callback;
 use crate::{database, write_snapshot, AppData, Result, MAX_LIBRARY};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
@@ -7,7 +8,12 @@ use std::time::{Duration, Instant};
 use tauri::{async_runtime::Mutex, State};
 
 #[derive(Default)]
-pub struct Account(Mutex<Option<Session>>);
+pub struct Account(Mutex<Option<Session>>, Mutex<Option<Pending>>);
+
+struct Pending {
+    email: String,
+    callback: Callback,
+}
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Identity {
@@ -56,50 +62,54 @@ pub fn account_configured() -> bool {
 }
 
 #[tauri::command]
-pub async fn account_send_code(app: State<'_, AppData>, email: String, create: bool) -> Result<()> {
+pub async fn account_send_code(app: State<'_, AppData>, account: State<'_, Account>, email: String) -> Result<()> {
     let email = email.trim();
     if email.len() > 254 || !email.contains('@') {
         return Err("Enter a valid email address.".into());
     }
+    let mut pending = account.1.lock().await;
+    let callback = Callback::start()?;
     let response = request(&app, reqwest::Method::POST, "/auth/v1/otp")?
-        .json(&json!({"email":email,"create_user":create}))
+        .query(&[("redirect_to", &callback.redirect)])
+        .json(&json!({"email":email,"create_user":true,"code_challenge":callback.challenge(),"code_challenge_method":"s256"}))
         .send().await.map_err(|_| "Could not reach the account service.")?;
     match response.status().as_u16() {
-        200..=299 => Ok(()),
-        429 => Err("Too many requests. Wait a moment before requesting another code.".into()),
-        _ => Err("Could not send a code. Check the email and account service settings.".into()),
+        200..=299 => {
+            *pending = Some(Pending { email: email.into(), callback });
+            Ok(())
+        },
+        429 => Err("Too many requests. Wait a moment before requesting another email.".into()),
+        _ => Err("Could not send a sign-in email. Check the email and account service settings.".into()),
     }
 }
 
-fn verification(email: &str, input: &str, endpoint: &str) -> Result<Value> {
-    let invalid = || "Paste the sign-in link from your email, or enter the code.".to_string();
-    if (6..=10).contains(&input.len()) && input.bytes().all(|b| b.is_ascii_digit()) {
-        return Ok(json!({"email":email,"token":input,"type":"email"}));
+#[tauri::command]
+pub async fn account_cancel(account: State<'_, Account>) -> Result<()> {
+    *account.1.lock().await = None;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn account_poll(app: State<'_, AppData>, account: State<'_, Account>) -> Result<Option<SignIn>> {
+    let mut pending = account.1.lock().await;
+    let Some(requested) = pending.as_ref() else { return Ok(None) };
+    let Some(code) = requested.callback.poll()? else { return Ok(None) };
+    let requested = pending.take().unwrap();
+    let mut active = account.0.lock().await;
+    let response = request(&app, reqwest::Method::POST, "/auth/v1/token?grant_type=pkce")?
+        .json(&json!({"auth_code":code,"code_verifier":requested.callback.verifier}))
+        .send().await.map_err(|_| "Could not finish sign-in. Request a fresh email.")?;
+    let tokens: Tokens = response.error_for_status().map_err(|_| "The link could not finish signing in. Request a fresh email.")?
+        .json().await.map_err(|_| "The account service returned an invalid session.")?;
+    finish_sign_in(&app, &mut active, &requested.email, tokens).map(Some)
+}
+
+fn verification(email: &str, code: &str) -> Result<Value> {
+    if (6..=10).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_digit()) {
+        Ok(json!({"email":email,"token":code,"type":"email"}))
+    } else {
+        Err("Enter the numeric code from the email.".into())
     }
-    if input.len() > 2048 {
-        return Err(invalid());
-    }
-    let url = reqwest::Url::parse(input).map_err(|_| invalid())?;
-    if url.origin().ascii_serialization() != endpoint || url.path() != "/auth/v1/verify"
-        || !url.username().is_empty() || url.password().is_some() || url.fragment().is_some()
-    {
-        return Err(invalid());
-    }
-    let mut token = None;
-    let mut kind = None;
-    for (key, value) in url.query_pairs() {
-        match key.as_ref() {
-            "token" if token.is_none() => token = Some(value),
-            "type" if kind.is_none() => kind = Some(value),
-            "token" | "type" => return Err(invalid()),
-            _ => {}
-        }
-    }
-    let token = token.filter(|value| value.len() == 56 && value.bytes().all(|b| b.is_ascii_hexdigit()))
-        .ok_or_else(&invalid)?;
-    let kind = kind.filter(|value| matches!(value.as_ref(), "signup" | "magiclink" | "email"))
-        .ok_or_else(invalid)?;
-    Ok(json!({"token_hash":token,"type":kind}))
 }
 
 #[tauri::command]
@@ -109,12 +119,24 @@ pub async fn account_verify(app: State<'_, AppData>, account: State<'_, Account>
         return Err("Sign out before starting another session.".into());
     }
     let email = email.trim();
-    let payload = verification(email, code.trim(), config()?.0)?;
+    let payload = verification(email, code.trim())?;
     let response = request(&app, reqwest::Method::POST, "/auth/v1/verify")?
         .json(&payload)
         .send().await.map_err(|_| "Could not reach the account service.")?;
     let tokens: Tokens = response.error_for_status().map_err(|_| "The sign-in link or code is invalid or expired. Request a new email.")?
         .json().await.map_err(|_| "The account service returned an invalid session.")?;
+    let result = finish_sign_in(&app, &mut active, email, tokens);
+    drop(active);
+    if result.is_ok() {
+        *account.1.lock().await = None;
+    }
+    result
+}
+
+fn finish_sign_in(app: &AppData, active: &mut Option<Session>, email: &str, tokens: Tokens) -> Result<SignIn> {
+    if active.is_some() {
+        return Err("Sign out before starting another session.".into());
+    }
     let identity = tokens.user.clone();
     if !identity.email.eq_ignore_ascii_case(email) {
         return Err("This sign-in email belongs to a different address.".into());
@@ -238,19 +260,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sign_in_link_uses_only_the_configured_verification_endpoint() {
-        let endpoint = "https://demo.supabase.co";
+    fn verification_requires_a_numeric_email_code() {
         let email = "test@example.com";
-        let token = "a".repeat(56);
-        for kind in ["magiclink", "signup"] {
-            let link = format!("{endpoint}/auth/v1/verify?token={token}&type={kind}&redirect_to=http%3A%2F%2Flocalhost%3A3000");
-            assert_eq!(verification(email, &link, endpoint).unwrap(), json!({"token_hash":token,"type":kind}));
-        }
-        assert_eq!(verification(email, "123456", endpoint).unwrap(), json!({"email":email,"token":"123456","type":"email"}));
-        let wrong_project = format!("https://other.supabase.co/auth/v1/verify?token={token}&type=magiclink");
-        assert!(verification(email, &wrong_project, endpoint).is_err());
-        let wrong_action = format!("{endpoint}/auth/v1/verify?token={token}&type=recovery");
-        assert!(verification(email, &wrong_action, endpoint).is_err());
+        assert_eq!(verification(email, "123456").unwrap(), json!({"email":email,"token":"123456","type":"email"}));
+        assert!(verification(email, "abc123").is_err());
     }
 
     #[test]

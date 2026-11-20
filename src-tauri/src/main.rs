@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod account;
+mod account_callback;
 mod comments;
 mod desktop;
 #[cfg(windows)]
@@ -265,6 +266,8 @@ fn main() {
         youtube_embed::youtube_embed_port,
         account::account_configured,
         account::account_send_code,
+        account::account_poll,
+        account::account_cancel,
         account::account_verify,
         account::account_read,
         account::account_write,

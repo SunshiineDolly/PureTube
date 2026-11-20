@@ -13,6 +13,8 @@ type Change = (update: (previous: Library) => Library, cloud?: Binding) => Promi
 export function useAccount(ready: boolean, read: () => Library, change: Change) {
  const [configured, setConfigured] = useState<boolean>()
  const [user, setUser] = useState<Identity>()
+ const [pendingEmail, setPendingEmail] = useState('')
+ const [emailAttempt, setEmailAttempt] = useState(0)
  const [busy, setBusy] = useState(false)
  const [message, setMessage] = useState('')
  const [problem, setProblem] = useState('')
@@ -92,22 +94,56 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
    }
  }, [user, ready, syncNow])
 
- function sendCode(email: string, create: boolean) {
-   return run(() => invoke<void>('account_send_code', {email, create}))
+ const acceptSignIn = useCallback(async ({identity, base}: SignIn) => {
+   try {
+     binding.current = {id: identity.id, base: base ? readCloudLibrary(base) : emptyCloudLibrary()}
+     setUser(identity)
+     setPendingEmail('')
+     setMessage('')
+     setProblem('')
+   } catch (error) {
+     await invoke('account_sign_out')
+     throw error
+   }
+ }, [])
+
+ useEffect(() => {
+   if (!pendingEmail || user) return
+   let stopped = false
+   let timer: number
+   async function poll() {
+     try {
+       const result = await invoke<SignIn | null>('account_poll')
+       if (result) {
+         await acceptSignIn(result)
+         return
+       }
+       if (!stopped) timer = window.setTimeout(poll, 750)
+     } catch (error) {
+       if (!stopped) setProblem(errorText(error))
+     }
+   }
+   timer = window.setTimeout(poll, 750)
+   return () => { stopped = true; window.clearTimeout(timer) }
+ }, [pendingEmail, emailAttempt, user, acceptSignIn])
+
+ function sendEmail(email: string) {
+   return run(async () => {
+     await invoke<void>('account_send_code', {email})
+     setPendingEmail(email)
+     setEmailAttempt(attempt => attempt + 1)
+   })
  }
 
- async function verify(email: string, code: string) {
+ function cancelEmail() {
    return run(async () => {
-     const {identity, base} = await invoke<SignIn>('account_verify', {email, code})
-     try {
-       binding.current = {id: identity.id, base: base ? readCloudLibrary(base) : emptyCloudLibrary()}
-       setUser(identity)
-       setMessage('')
-     } catch (error) {
-       await invoke('account_sign_out')
-       throw error
-     }
+     await invoke<void>('account_cancel')
+     setPendingEmail('')
    })
+ }
+
+ function verify(email: string, code: string) {
+   return run(async () => acceptSignIn(await invoke<SignIn>('account_verify', {email, code})))
  }
 
  function signOut() {
@@ -120,7 +156,7 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
    })
  }
 
- return {configured, user, busy, message, problem, sendCode, verify, signOut, syncNow}
+ return {configured, user, busy, message, problem, pendingEmail, sendEmail, cancelEmail, verify, signOut, syncNow}
 }
 
 export type ViddyAccount = ReturnType<typeof useAccount>
