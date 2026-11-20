@@ -32,15 +32,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-on-failure: true
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --release --locked --target aarch64-apple-darwin --manifest-path src-tauri/Cargo.toml
       - name: Build universal app and disk image
         run: npm run tauri build -- --ci --target universal-apple-darwin
       - name: Verify both architectures and app signature
         run: |
-          lipo -verify_arch arm64 x86_64 src-tauri/target/universal-apple-darwin/release/bundle/macos/Viddy.app/Contents/MacOS/puretube
+          lipo src-tauri/target/universal-apple-darwin/release/bundle/macos/Viddy.app/Contents/MacOS/puretube -verify_arch arm64 x86_64
           codesign --verify --deep --strict --verbose=2 src-tauri/target/universal-apple-darwin/release/bundle/macos/Viddy.app
       - name: Smoke test native app startup
         run: |
@@ -68,3 +69,4 @@ jobs:
           path: mac-download/
           if-no-files-found: error
           retention-days: 30
+
