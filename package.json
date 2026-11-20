@@ -1,13 +1,13 @@
 {
   "name": "viddy",
-  "version": "0.24.1",
+  "version": "0.25.0",
   "private": true,
   "type": "module",
   "scripts": {
     "postinstall": "node scripts/prepare-macos.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts && node --test cloudflare/worker.test.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

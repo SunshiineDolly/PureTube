@@ -12,3 +12,6 @@ client_secret*.json
 *.pem
 *.dpapi
 *.sqlite3
+.wrangler/
+.dev.vars
+.dev.vars.*

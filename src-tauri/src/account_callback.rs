@@ -65,7 +65,7 @@ impl Callback {
         match self.result.try_recv() {
             Ok(result) => Ok(Some(result)),
             Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) => Err("That sign-in request expired. Send a fresh email.".into()),
+            Err(TryRecvError::Disconnected) => Err("That sign-in request expired. Please try Discord sign-in again.".into()),
         }
     }
 }
@@ -96,7 +96,7 @@ fn receive(mut stream: TcpStream, expected_path: &str) -> Option<String> {
     let (status, content) = if code.is_some() {
         ("200 OK", "Return to Viddy to finish signing in. You can close this tab.")
     } else if target == expected_path {
-        ("200 OK", "This link did not finish signing in. Return to Viddy and request a fresh email.")
+        ("200 OK", "This link did not finish signing in. Return to Viddy and try Discord sign-in again.")
     } else {
         ("404 Not Found", "This sign-in request is unavailable.")
     };

@@ -1,0 +1,11 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "viddy-sync",
+  "account_id": "420e9692ae4b101fc74e01953323ac92",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-20",
+  "workers_dev": true,
+  "observability": { "enabled": false },
+  "vars": { "DISCORD_CLIENT_ID": "1573479904048054412" },
+  "d1_databases": [{ "binding": "DB", "database_name": "viddy-library", "database_id": "c9ce8b84-7a80-456c-b2ae-93580f9996ab" }]
+}

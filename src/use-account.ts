@@ -4,7 +4,7 @@ import {errorText} from './domain'
 import {cloudLibrary, emptyCloudLibrary, mergeCloudLibrary, readCloudLibrary, sameCloudLibrary, sameVideo, type CloudLibrary} from './account-library'
 import type {Library} from './library'
 
-type Identity = {id: string; email: string; private_key?: boolean}
+type Identity = {id: string; display_name: string}
 type Snapshot = {revision: number; data: unknown}
 type Binding = {id: string; base: CloudLibrary}
 type SignIn = {identity: Identity; base: unknown}
@@ -13,9 +13,8 @@ type Change = (update: (previous: Library) => Library, cloud?: Binding) => Promi
 export function useAccount(ready: boolean, read: () => Library, change: Change) {
  const [configured, setConfigured] = useState<boolean>()
  const [user, setUser] = useState<Identity>()
- const [pendingEmail, setPendingEmail] = useState('')
- const [creatingAccount, setCreatingAccount] = useState(false)
- const [emailAttempt, setEmailAttempt] = useState(0)
+ const [pending, setPending] = useState(false)
+ const [restored, setRestored] = useState(false)
  const [busy, setBusy] = useState(false)
  const [message, setMessage] = useState('')
  const [problem, setProblem] = useState('')
@@ -36,7 +35,13 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
      await action()
      return true
    } catch (error) {
-     setProblem(errorText(error))
+     const text = errorText(error)
+     if (text.startsWith('SIGNED_OUT:')) {
+       binding.current = undefined
+       knownRevision.current = undefined
+       setUser(undefined)
+     }
+     setProblem(text.replace(/^SIGNED_OUT: /, ''))
      return false
    } finally {
      working.current = false
@@ -85,7 +90,7 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
    if (!user || !ready) return
    void syncNow()
    const refresh = () => { void syncNow() }
-   const timer = window.setInterval(refresh, 30_000)
+   const timer = window.setInterval(refresh, 60_000)
    window.addEventListener('focus', refresh)
    window.addEventListener('online', refresh)
    return () => {
@@ -99,7 +104,7 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
    try {
      binding.current = {id: identity.id, base: base ? readCloudLibrary(base) : emptyCloudLibrary()}
      setUser(identity)
-     setPendingEmail('')
+     setPending(false)
      setMessage('')
      setProblem('')
    } catch (error) {
@@ -109,43 +114,50 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
  }, [])
 
  useEffect(() => {
-   if (!pendingEmail || user) return
+   if (!pending || user) return
    let stopped = false
    let timer: number
    async function poll() {
      try {
        const result = await invoke<SignIn | null>('account_poll')
        if (result) {
-         await acceptSignIn(result)
+         if (!stopped) await acceptSignIn(result)
          return
        }
        if (!stopped) timer = window.setTimeout(poll, 750)
      } catch (error) {
-       if (!stopped) setProblem(errorText(error))
+       if (!stopped) {setProblem(errorText(error)); setPending(false)}
      }
    }
    timer = window.setTimeout(poll, 750)
    return () => { stopped = true; window.clearTimeout(timer) }
- }, [pendingEmail, emailAttempt, user, acceptSignIn])
+ }, [pending, user, acceptSignIn])
 
- function sendEmail(email: string, create: boolean) {
+ useEffect(() => {
+   if (!ready) return
+   let stopped = false
+   void invoke<SignIn | null>('account_restore').then(async result => {
+     if (!stopped && result) await acceptSignIn(result)
+   }).catch(error => {if (!stopped) setProblem(errorText(error))})
+     .finally(() => {if (!stopped) setRestored(true)})
+   return () => {stopped = true}
+ }, [ready, acceptSignIn])
+
+ function signIn() {
    return run(async () => {
-     await invoke<void>('account_send_code', {email, create})
-     setCreatingAccount(create)
-     setPendingEmail(email)
-     setEmailAttempt(attempt => attempt + 1)
+     await invoke('account_start')
+     setPending(true)
    })
  }
 
- function cancelEmail() {
+ function cancel() {
    return run(async () => {
-     await invoke<void>('account_cancel')
-     setPendingEmail('')
+     await invoke('account_cancel')
+     setPending(false)
+     // A browser callback may have finished just before cancellation.
+     const result = await invoke<SignIn | null>('account_restore')
+     if (result) await acceptSignIn(result)
    })
- }
-
- function verify(email: string, code: string) {
-   return run(async () => acceptSignIn(await invoke<SignIn>('account_verify', {email, code})))
  }
 
  function signOut() {
@@ -154,15 +166,12 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
      binding.current = undefined
      knownRevision.current = undefined
      setUser(undefined)
+     setPending(false)
      setMessage('')
    })
  }
 
- function useKey(key: string, action: 'create' | 'identify' | 'attach') {
-   return run(async () => acceptSignIn(await invoke<SignIn>('account_use_key', {key, action})))
- }
-
- return {configured, user, busy, message, problem, pendingEmail, creatingAccount, sendEmail, cancelEmail, verify, signOut, syncNow, useKey}
+ return {configured, user, busy, restored, message, problem, pending, signIn, cancel, signOut, syncNow}
 }
 
 export type ViddyAccount = ReturnType<typeof useAccount>
