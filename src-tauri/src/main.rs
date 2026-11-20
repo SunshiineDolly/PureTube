@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod account;
 mod comments;
 mod desktop;
 #[cfg(windows)]
@@ -55,12 +56,15 @@ fn write(path: &Path, data: Value) -> Result<()> {
     if data.get("version").and_then(Value::as_u64) != Some(1) || raw.len() > MAX_LIBRARY {
         return Err("The library format or size is unsupported.".into());
     }
-    database(path)?
-        .execute(
-            "INSERT INTO library VALUES (1, ?1) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
-            params![raw],
-        )
-        .map_err(|_| "Could not save the local library.")?;
+    write_snapshot(&database(path)?, &raw)?;
+    Ok(())
+}
+
+fn write_snapshot(conn: &Connection, raw: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO library VALUES (1, ?1) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+        params![raw],
+    ).map_err(|_| "Could not save the local library.")?;
     Ok(())
 }
 #[tauri::command]
@@ -88,13 +92,17 @@ fn recover_library(primary: &Path, recovery: Option<&Path>) -> Result<Option<Val
     current
 }
 #[tauri::command]
-fn save(app: tauri::AppHandle, state: State<AppData>, data: Value) -> Result<()> {
+fn save(app: tauri::AppHandle, state: State<AppData>, data: Value, cloud: Option<account::Binding>) -> Result<()> {
     let _guard = state.library_guard.lock().map_err(|_| "Library is busy.")?;
     let show_tray = data
         .pointer("/settings/tray")
         .and_then(Value::as_bool)
         .unwrap_or(false) || data.pointer("/settings/closeToTray").and_then(Value::as_bool).unwrap_or(false);
-    write(&state.db, data.clone())?;
+    if let Some(cloud) = cloud {
+        account::save_synced(&state.db, &data, &cloud)?;
+    } else {
+        write(&state.db, data.clone())?;
+    }
     if let Some(recovery) = &state.recovery {
         if let Some(parent) = recovery.parent() { std::fs::create_dir_all(parent).map_err(|_| "Library saved, but its Documents backup folder is unavailable.")?; }
         write(recovery, data).map_err(|_| "Library saved, but its Documents backup could not be updated.")?;
@@ -255,6 +263,12 @@ fn main() {
         comments::video_comments,
         #[cfg(target_os = "macos")]
         youtube_embed::youtube_embed_port,
+        account::account_configured,
+        account::account_send_code,
+        account::account_verify,
+        account::account_read,
+        account::account_write,
+        account::account_sign_out,
         original_player::original_player,
         original_player::close_original_player,
         downloads::download_preferences,
@@ -339,6 +353,7 @@ fn main() {
             }
         })
         .setup(move |app| {
+            app.manage(account::Account::default());
             #[cfg(target_os = "macos")]
             app.manage(youtube_embed::EmbedOrigin::default());
             #[cfg(target_os = "macos")]

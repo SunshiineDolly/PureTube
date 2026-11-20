@@ -1,0 +1,40 @@
+name: Build Viddy for Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/macos-app]
+    paths:
+      - src/**
+      - src-tauri/**
+      - scripts/**
+      - package*.json
+      - .github/workflows/windows-sync-test.yml
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - run: npm ci
+      - run: npm test
+      - run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml
+      - run: npm run tauri build -- --ci --bundles nsis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Viddy-Windows-sync-test
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

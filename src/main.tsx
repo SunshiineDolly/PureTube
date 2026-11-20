@@ -16,6 +16,7 @@ import {Preferences} from './settings'
 import {Heading,Quiet,Subscriptions,ChannelPage,LibraryPage,Notice,type ChannelTab,type Shared} from './screens'
 import {PlayerFrame} from './player'
 import {useLibrary} from './hooks'
+import {useAccount} from './use-account'
 import {videoId,channelId,errorText,visible,type Video} from './domain'
 import {linkVideo,parseVideo,usePublicFeeds} from './public-feeds'
 import {recordViewing,rememberVideo,toggled} from './library'
@@ -54,7 +55,8 @@ function SessionCounter({counter}:{counter:ReturnType<typeof createSessionCounte
  return <p title="Playback time since Viddy opened" data-session-seconds={Math.floor(seconds)}><Clock3 size={16}/><span>{clock(seconds)} this session</span></p>
 }
 function App() {
- const {data,ready,failed,error,change,setting}=useLibrary(), s=data.settings
+ const {data,ready,failed,error,change,setting,read}=useLibrary(), s=data.settings
+ const account=useAccount(ready,read,change)
  const [route,setRoute]=useState<Route>({name:'home'}), routes=useRef<{route:Route;text:string;scroll:number}[]>([])
  const restoreScroll=useRef(0)
  const routeRef=useRef(route);routeRef.current=route
@@ -213,7 +215,7 @@ function App() {
  route.name==='search'?<SearchPage key={route.query} shared={shared} query={route.query} selectedSource={route.source} onSourceChange={source=>setRoute({...route,source})}/>:
  route.name==='library'?<LibraryStudio shared={shared}/>:
  route.name==='downloads'?<DownloadsPage/>:
- route.name==='settings'?<><Heading label="PREFERENCES" title="Settings" detail="Make Viddy work the way you want."/><Preferences data={data} setting={setting} change={change} updates={updates}/></>:
+ route.name==='settings'?<><Heading label="PREFERENCES" title="Settings" detail="Make Viddy work the way you want."/><Preferences data={data} setting={setting} change={change} updates={updates} account={account}/></>:
  route.name==='subscriptions'?<Subscriptions shared={shared}/>:
  route.name==='channel'?<ChannelPage key={route.id} shared={shared} id={route.id} tab={route.tab} setTab={tab=>setRoute({...route,tab})}/>:
  route.name==='watch'?null:<LibraryPage key={route.name} shared={shared} kind={route.name}/>}
