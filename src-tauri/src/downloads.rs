@@ -736,10 +736,12 @@ mod migration_tests {
     use super::*;
     #[test]
     fn legacy_downloads_keep_their_original_folder_after_renaming() {
-        let mut job:Job=serde_json::from_value(json!({"id":"job","video_id":"jNQXAC9IVRw","title":"Video","status":"complete","percent":100,"message":"Saved","file":r"C:\Downloads\PureTube\Video [jNQXAC9IVRw].mp4","quality":1080})).unwrap();
-        let renamed = Path::new(r"C:\Downloads\Viddy");
-        assert_eq!(restored_directory(&job, renamed), r"C:\Downloads\PureTube");
+        let directory = tempfile::tempdir().unwrap();
+        let original = directory.path().join("PureTube");
+        let renamed = directory.path().join("Viddy");
+        let mut job:Job=serde_json::from_value(json!({"id":"job","video_id":"jNQXAC9IVRw","title":"Video","status":"complete","percent":100,"message":"Saved","file":original.join("Video [jNQXAC9IVRw].mp4"),"quality":1080})).unwrap();
+        assert_eq!(restored_directory(&job, &renamed), original.to_string_lossy());
         job.file = None;
-        assert_eq!(restored_directory(&job, renamed), renamed.to_string_lossy());
+        assert_eq!(restored_directory(&job, &renamed), renamed.to_string_lossy());
     }
 }
