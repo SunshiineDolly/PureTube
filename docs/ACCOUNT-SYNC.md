@@ -4,7 +4,7 @@ Viddy uses one Supabase project for both desktop builds. The app can be used loc
 
 ## Configure the service
 
-The Viddy test project is already configured. To use another project:
+Viddy uses the configured Supabase project. For public sign-in, connect a verified sender to Supabase under Authentication → Emails → SMTP Settings. Test delivery to an address outside the project team before publishing. To use another project:
 
 1. Create a Supabase project. Run the [library migration](../supabase/migrations/20261120_account_sync.sql) once in its SQL Editor.
 2. Enable email sign-in and allow new users. The default message provides a sign-in link. Viddy also accepts codes when the template includes `{{ .Token }}`. Configure SMTP if you need to send codes to addresses outside the Supabase organization. The built-in sender is intended for testing and restricts eligible recipients.

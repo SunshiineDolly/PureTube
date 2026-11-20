@@ -27,11 +27,6 @@ fn safe_endpoint(endpoint: &str) -> Option<Url> {
     Some(url)
 }
 pub fn config() -> Option<(&'static str, Url)> {
-    // The public release feed currently contains Windows installers only.
-    // Mac test builds opt in only when a Mac update endpoint is supplied.
-    if cfg!(target_os = "macos") && ENDPOINT.is_none() {
-        return None;
-    }
     let key = PUBLIC_KEY
         .unwrap_or(include_str!("../updater-public-key.pub"))
         .trim();
@@ -107,7 +102,7 @@ pub async fn update_install(
     if let Some(downloads) = app.try_state::<crate::downloads::Downloads>() {
         downloads.shutdown();
     }
-    update.install(bytes).map_err(|_| "Windows could not start the update installer. Try again or download the release from GitHub.".into())
+    update.install(bytes).map_err(|_| "Viddy could not install the update. Try again or download the release from GitHub.".into())
 }
 
 #[cfg(test)]

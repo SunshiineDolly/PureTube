@@ -7,9 +7,10 @@ const first = 'vWG8Exo0QQ4'
 const second = 'jNQXAC9IVRw'
 
 test('first sign-in keeps existing Windows and Mac library entries', () => {
- const windows = cloudLibrary({...empty(), history:{[first]:100}, favorites:[first], collections:[{name:'Saved',ids:[first]}]})
+ const windows = cloudLibrary({...empty(), profileName:'Viddy viewer', history:{[first]:100}, favorites:[first], collections:[{name:'Saved',ids:[first]}]})
  const mac = cloudLibrary({...empty(), history:{[second]:200}, later:[second], collections:[{name:'Saved',ids:[second]}]})
  const merged = mergeCloudLibrary(emptyCloudLibrary(), mac, windows)
+ assert.equal(merged.profileName,'Viddy viewer')
  assert.deepEqual(merged.history,{[first]:100,[second]:200})
  assert.deepEqual(merged.favorites,[first])
  assert.deepEqual(merged.later,[second])

@@ -94,7 +94,7 @@ pub fn configure_tray(app: &tauri::App) -> tauri::Result<()> {
             let _ = w.set_focus();
         }
     }
-    let mut tray = TrayIconBuilder::with_id("puretube")
+    let mut tray = TrayIconBuilder::with_id("viddy")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .tooltip("Viddy")

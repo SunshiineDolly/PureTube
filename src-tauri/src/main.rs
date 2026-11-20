@@ -107,7 +107,7 @@ fn save(app: tauri::AppHandle, state: State<AppData>, data: Value, cloud: Option
         if let Some(parent) = recovery.parent() { std::fs::create_dir_all(parent).map_err(|_| "Library saved, but its Documents backup folder is unavailable.")?; }
         write(recovery, data).map_err(|_| "Library saved, but its Documents backup could not be updated.")?;
     }
-    if let Some(tray) = app.tray_by_id("puretube") {
+    if let Some(tray) = app.tray_by_id("viddy") {
         let _ = tray.set_visible(show_tray);
     }
     Ok(())
@@ -330,7 +330,7 @@ fn main() {
                 if let Some(state) = window.try_state::<downloads::Downloads>() {
                     state.shutdown();
                 }
-                if let Some(tray) = window.app_handle().tray_by_id("puretube") {
+                if let Some(tray) = window.app_handle().tray_by_id("viddy") {
                     let _ = tray.set_visible(false);
                 }
                 window.app_handle().exit(0);

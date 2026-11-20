@@ -1,4 +1,4 @@
-# Viddy 0.22.3 for Mac — test build
+# Viddy for Mac — test build
 
 This build packages the current Viddy app for Apple Silicon and Intel Macs running macOS 14 Sonoma or newer. It is a development test build, not an Apple-notarized release. macOS playback and desktop behavior still need testing on a real Mac.
 
@@ -8,7 +8,7 @@ This build packages the current Viddy app for Apple Silicon and Intel Macs runni
 2. Unzip the download, open the `.dmg`, and drag **Viddy** into **Applications**.
 3. Open Viddy from Applications. If macOS blocks this trusted test build, open **System Settings → Privacy & Security**, find the Viddy message, and select **Open Anyway**, then confirm. No terminal security changes are needed.
 
-There are no automatic Mac updates in this test build. Replace the app with a later Mac build to update; the library is stored separately. Windows release assets and updates are unchanged.
+Install this version once to enable signed Mac updates in Settings. Updates appear when a signed Mac archive is included in the GitHub release feed. Your library is stored separately.
 
 ## Downloads
 

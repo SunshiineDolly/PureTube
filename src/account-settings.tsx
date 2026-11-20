@@ -10,7 +10,7 @@ export function AccountSettings({account}: {account: ViddyAccount}) {
 
  return <section>
    <h2><UserRound/> Viddy account</h2>
-   <p>Sync watch history, resume positions, follows, favorites, Watch Later, and playlists between your devices.</p>
+   <p>Sync your profile, watch history, resume positions, follows, favorites, Watch Later, and playlists between your devices.</p>
    {account.configured === false && <p>Account sync is unavailable in this build.</p>}
    {account.problem && <p className="notice" role="alert">{account.problem}</p>}
    {account.user ? <>

@@ -4,6 +4,7 @@ param(
  [string]$PrivateKeyPath=(Join-Path $env:LOCALAPPDATA 'PureTube\signing\updater.key'),
  [string]$PasswordFile=(Join-Path $env:LOCALAPPDATA 'PureTube\signing\password.dpapi'),
  [string]$NotesPath,
+ [string]$MacArtifactFolder,
  [switch]$BundleOnly,
  [uri]$FeedUrl='https://github.com/SunshiineDolly/Viddy/releases/latest/download/latest.json',
  [uri]$AssetBaseUrl
@@ -18,7 +19,7 @@ if($pubFile -eq $secretFile -or $secretFile.StartsWith($repo+[IO.Path]::Director
 $config=Get-Content -LiteralPath (Join-Path $repo 'src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json
 $version=$config.version
 if(!$NotesPath){$NotesPath=Join-Path $repo "releases/v$version.md"}
-$notes=if(Test-Path -LiteralPath $NotesPath){Get-Content -LiteralPath $NotesPath -Raw}else{"PureTube $version update."}
+$notes=if(Test-Path -LiteralPath $NotesPath){Get-Content -LiteralPath $NotesPath -Raw}else{"Viddy $version update."}
 if(!$AssetBaseUrl){$AssetBaseUrl=[uri]"https://github.com/SunshiineDolly/Viddy/releases/download/v$version/"}
 foreach($url in @($FeedUrl,$AssetBaseUrl)){
  if(!$url.IsAbsoluteUri -or $url.Scheme -ne 'https' -or $url.UserInfo -or $url.Fragment -or $url.Query){throw 'Use public HTTPS URLs without embedded credentials, query parameters, or fragments.'}
@@ -54,6 +55,22 @@ try {
  $signature=(Get-Content -LiteralPath ($installer.FullName+'.sig') -Raw).Trim()
  if(!$signature){throw 'Tauri did not generate an installer signature.'}
  $manifest=@{version=$version;notes=$notes;pub_date=[DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ');platforms=@{'windows-x86_64'=@{url=[uri]::new($AssetBaseUrl,$name).AbsoluteUri;signature=$signature}}}
+ if($MacArtifactFolder){
+  $macArchiveName="Viddy_${version}_universal.app.tar.gz"
+  $macDmgName="Viddy_${version}_universal.dmg"
+  $macArchive=Join-Path $output $macArchiveName
+  foreach($file in @($macArchiveName,$macDmgName)){
+   Copy-Item -LiteralPath (Join-Path $MacArtifactFolder $file) -Destination (Join-Path $output $file)
+  }
+  Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY
+  npm.cmd run tauri signer sign -- --private-key-path $secretFile --app-version $version $macArchive
+  if($LASTEXITCODE){throw 'Signing the Mac update archive failed.'}
+  $macSignature=(Get-Content -LiteralPath "$macArchive.sig" -Raw).Trim()
+  if(!$macSignature){throw 'The Mac update archive is missing a signature.'}
+  foreach($platform in @('darwin-aarch64','darwin-x86_64')){
+   $manifest.platforms[$platform]=@{url=[uri]::new($AssetBaseUrl,$macArchiveName).AbsoluteUri;signature=$macSignature}
+  }
+ }
  $destination=Join-Path $output 'latest.json'
  [IO.File]::WriteAllText($destination,($manifest | ConvertTo-Json -Depth 6)+[Environment]::NewLine)
  Get-Item -LiteralPath $installer.FullName,($installer.FullName+'.sig'),$destination | Select-Object Name,Length,FullName

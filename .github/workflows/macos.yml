@@ -60,9 +60,12 @@ jobs:
         run: |
           mkdir -p mac-download
           cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg mac-download/
+          version="$(node -p "require('./package.json').version")"
+          app_dir="$PWD/src-tauri/target/universal-apple-darwin/release/bundle/macos"
+          tar -czf "mac-download/Viddy_${version}_universal.app.tar.gz" -C "$app_dir" Viddy.app
           cp docs/MACOS-TESTING.md mac-download/READ-ME-FIRST.md
           cd mac-download
-          shasum -a 256 *.dmg > SHA256SUMS.txt
+          shasum -a 256 *.dmg *.app.tar.gz > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Viddy-macOS-universal

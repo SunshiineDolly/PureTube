@@ -1,4 +1,4 @@
-# PureTube releases
+# Viddy releases
 
 Windows installers are available in GitHub Releases, with one release per embedded application version. The newest version is marked Latest. Verify downloads using each release's SHA256SUMS.txt.
 

@@ -1,8 +1,8 @@
 import {decode, empty, type Library} from './library.ts'
 
 function pick(library: Library) {
- const {version, follows, groups, later, favorites, collections, history, progress, savedVideos} = library
- return {version, follows, groups, later, favorites, collections, history, progress, savedVideos}
+ const {version, profileName, profileBio, profileEmoji, follows, groups, later, favorites, collections, history, progress, savedVideos} = library
+ return {version, profileName, profileBio, profileEmoji, follows, groups, later, favorites, collections, history, progress, savedVideos}
 }
 
 export type CloudLibrary = ReturnType<typeof pick>
@@ -57,6 +57,9 @@ export function mergeCloudLibrary(base: CloudLibrary, local: CloudLibrary, remot
    (here, there, before) => mergeList(before ?? [], here, there))
  return readCloudLibrary({
    version: 1,
+   profileName: local.profileName === base.profileName ? remote.profileName : local.profileName,
+   profileBio: local.profileBio === base.profileBio ? remote.profileBio : local.profileBio,
+   profileEmoji: local.profileEmoji === base.profileEmoji ? remote.profileEmoji : local.profileEmoji,
    follows: mergeList(base.follows, local.follows, remote.follows),
    groups: mergeRecord(base.groups, local.groups, remote.groups),
    later: mergeList(base.later, local.later, remote.later),
