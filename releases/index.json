@@ -318,5 +318,13 @@
     "size": 4734045,
     "sha256": "2e10ecaeb5d692d1b530392f12947082a969ab9c6a9b06048b20033b0c37eb61",
     "source": "retained"
+  },
+  {
+    "version": "0.22.3",
+    "tag": "v0.22.3",
+    "installer": "Viddy_0.22.3_x64-setup.exe",
+    "size": 4728801,
+    "sha256": "68b0bf66869b8211aeb22d8ff9abd3d855fb4b2184dadbced307da54d0e05ba4",
+    "source": "retained"
   }
 ]

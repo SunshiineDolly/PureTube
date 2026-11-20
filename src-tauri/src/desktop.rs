@@ -9,6 +9,7 @@ pub fn configure_youtube_identity(
         WebResourceRequestedEventHandler,
     };
     use windows_core::{w, Interface, HSTRING, PCWSTR, PWSTR};
+    crate::audio_branding::track(webview.environment());
     unsafe {
         let core = webview.controller().CoreWebView2()?;
         let script = HSTRING::from(include_str!("read-only-chat.js"));

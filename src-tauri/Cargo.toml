@@ -1,6 +1,6 @@
 [package]
 name = "puretube"
-version = "0.22.2"
+version = "0.22.3"
 edition = "2021"
 description = "A quiet desktop for YouTube"
 
@@ -24,6 +24,7 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-single-instance = "2"
 webview2-com = "0.39"
+windows = { version = "0.62", features = ["Win32_Media_Audio", "Win32_System_Com_StructuredStorage", "Win32_System_Variant"] }
 windows-core = "0.62"
 
 [dev-dependencies]

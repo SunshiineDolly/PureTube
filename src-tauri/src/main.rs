@@ -2,6 +2,8 @@
 
 mod comments;
 mod desktop;
+#[cfg(windows)]
+mod audio_branding;
 mod downloads;
 mod original_player;
 mod popout;
