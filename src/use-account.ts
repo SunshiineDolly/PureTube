@@ -14,6 +14,7 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
  const [configured, setConfigured] = useState<boolean>()
  const [user, setUser] = useState<Identity>()
  const [pendingEmail, setPendingEmail] = useState('')
+ const [creatingAccount, setCreatingAccount] = useState(false)
  const [emailAttempt, setEmailAttempt] = useState(0)
  const [busy, setBusy] = useState(false)
  const [message, setMessage] = useState('')
@@ -127,9 +128,10 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
    return () => { stopped = true; window.clearTimeout(timer) }
  }, [pendingEmail, emailAttempt, user, acceptSignIn])
 
- function sendEmail(email: string) {
+ function sendEmail(email: string, create: boolean) {
    return run(async () => {
-     await invoke<void>('account_send_code', {email})
+     await invoke<void>('account_send_code', {email, create})
+     setCreatingAccount(create)
      setPendingEmail(email)
      setEmailAttempt(attempt => attempt + 1)
    })
@@ -160,7 +162,7 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
    return run(async () => acceptSignIn(await invoke<SignIn>('account_use_key', {key, action})))
  }
 
- return {configured, user, busy, message, problem, pendingEmail, sendEmail, cancelEmail, verify, signOut, syncNow, useKey}
+ return {configured, user, busy, message, problem, pendingEmail, creatingAccount, sendEmail, cancelEmail, verify, signOut, syncNow, useKey}
 }
 
 export type ViddyAccount = ReturnType<typeof useAccount>

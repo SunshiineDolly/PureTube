@@ -129,7 +129,7 @@ pub async fn account_use_key(
 }
 
 #[tauri::command]
-pub async fn account_send_code(app: State<'_, AppData>, account: State<'_, Account>, email: String) -> Result<()> {
+pub async fn account_send_code(app: State<'_, AppData>, account: State<'_, Account>, email: String, create: bool) -> Result<()> {
     let email = email.trim();
     if email.len() > 254 || !email.contains('@') {
         return Err("Enter a valid email address.".into());
@@ -138,7 +138,7 @@ pub async fn account_send_code(app: State<'_, AppData>, account: State<'_, Accou
     let callback = Callback::start()?;
     let response = request(&app, reqwest::Method::POST, "/auth/v1/otp")?
         .query(&[("redirect_to", &callback.redirect)])
-        .json(&json!({"email":email,"create_user":false,"code_challenge":callback.challenge(),"code_challenge_method":"s256"}))
+        .json(&json!({"email":email,"create_user":create,"code_challenge":callback.challenge(),"code_challenge_method":"s256"}))
         .send().await.map_err(|_| "Could not reach the account service.")?;
     match response.status().as_u16() {
         200..=299 => {
