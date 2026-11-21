@@ -4,7 +4,7 @@ import {readAccent,type Accent} from './palettes.ts'
 export type Settings = {
   theme:'dark'|'light'; accent:Accent; collapsed:boolean; density:'compact'|'comfortable';
   keywords:string[]; blocked:string[]; history:boolean; progress:boolean;
-  reminder:number; showTime:boolean;  tray:boolean;closeToTray:boolean; autoplay:boolean;intro:boolean;themedCursor:boolean
+  reminder:number; showTime:boolean;  tray:boolean;closeToTray:boolean; autoplay:boolean;videoPreviews:boolean;intro:boolean;themedCursor:boolean
 }
 export type Library = {
  version:1; profileName:string; profileBio:string;profileEmoji:string;preferredTopics:string[];savedVideos:Record<string,Video>;settings:Settings; follows:string[]; groups:Record<string,string>; later:string[]; favorites:string[];
@@ -12,7 +12,7 @@ export type Library = {
  checked:Record<string,string>; interests:Record<string,number>; viewing:Record<string,{seconds:number;at:number}>; tasteResetAt?:number; daily:{date:string;seconds:number}; liveReminders:Record<string,LiveReminder>;dismissed:string[]
 }
 export type LiveReminder={title:string;at:number}
-export const defaults:Settings = {theme:'dark',accent:'rose',collapsed:false,density:'comfortable',keywords:[],blocked:[],history:true,progress:true,reminder:0,showTime:false,tray:false,closeToTray:false,autoplay:true,intro:true,themedCursor:true}
+export const defaults:Settings = {theme:'dark',accent:'rose',collapsed:false,density:'comfortable',keywords:[],blocked:[],history:true,progress:true,reminder:0,showTime:false,tray:false,closeToTray:false,autoplay:true,videoPreviews:true,intro:true,themedCursor:true}
 export const empty = ():Library => ({version:1,profileName:'',profileBio:'',profileEmoji:'',preferredTopics:[],savedVideos:{},settings:{...defaults},follows:[],groups:{},later:[],favorites:[],collections:[],history:{},progress:{},checked:{},interests:{},viewing:{},daily:{date:'',seconds:0},liveReminders:{},dismissed:[]})
 export function recordViewing(data:Library,id:string,elapsed:number,at=Date.now()){
  if(!data.settings.history||!videoId(id)||!Number.isFinite(elapsed)||elapsed<=0)return data.viewing
@@ -41,7 +41,7 @@ export function decode(raw:unknown):Library {
    if ((choices[k] as readonly unknown[]).includes(s[k])) Object.assign(settings,{[k]:s[k]})
  }
  settings.accent=readAccent(s.accent)
- for (const k of ['collapsed','history','progress','showTime','tray','closeToTray','autoplay','intro','themedCursor'] as const) {
+ for (const k of ['collapsed','history','progress','showTime','tray','closeToTray','autoplay','videoPreviews','intro','themedCursor'] as const) {
    if (typeof s[k]==='boolean') settings[k]=s[k]
  }
  if (finite(s.reminder)) settings.reminder=Math.min(1440,Math.trunc(s.reminder))

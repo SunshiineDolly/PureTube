@@ -16,7 +16,7 @@ export function Preferences({data,setting,change,updates,account}:{data:Library;
  const s=data.settings,[message,setMessage]=useState(''),[autostart,setAutostart]=useState(false),[busy,setBusy]=useState(false)
  useEffect(()=>{invoke<boolean>('startup',{enabled:null}).then(setAutostart).catch(e=>setMessage(errorText(e)))},[])
  async function action(fn:()=>Promise<void>) {setBusy(true);setMessage('');try{await fn()}catch(e){setMessage(errorText(e))}finally{setBusy(false)}}
- const toggle=(k:'collapsed'|'history'|'progress'|'showTime'|'tray'|'closeToTray'|'autoplay'|'intro'|'themedCursor',label:string)=><Toggle label={label} value={s[k]} onChange={v=>setting(k,v)}/>
+ const toggle=(k:'collapsed'|'history'|'progress'|'showTime'|'tray'|'closeToTray'|'autoplay'|'videoPreviews'|'intro'|'themedCursor',label:string)=><Toggle label={label} value={s[k]} onChange={v=>setting(k,v)}/>
  return <div className="settings">
  {message&&<p className="notice sticky" role="status">{message}</p>}
  <AccountSettings account={account}/>
@@ -25,6 +25,7 @@ export function Preferences({data,setting,change,updates,account}:{data:Library;
  <label>Thumbnail density <select value={s.density} onChange={e=>setting('density',e.target.value as Settings['density'])}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>{toggle('collapsed','Collapse sidebar')}{toggle('themedCursor','Use Viddy’s themed cursor')}{toggle('intro','Play the Viddy intro on launch')}<button className="button" disabled={!s.intro} onClick={()=>window.dispatchEvent(new Event('viddy-intro'))}>Preview intro</button></section>
  <ContentFilters settings={s} onKeywords={values=>setting('keywords',values)} onBlocked={values=>setting('blocked',values)}/>
  <section><h2><PlaySquare/> Playback</h2><p>Videos start when selected. Use the player’s controls for playback or fullscreen. YouTube may show ads and related videos inside its player.</p>
+ {toggle('videoPreviews','Play muted video previews on hover')}{isMac&&<p>Video previews have their own control. Reduce Motion still limits interface animations.</p>}
  {toggle('autoplay','Autoplay recommendations after a video ends')}{toggle('progress','Track playback progress')}{toggle('showTime','Show viewing time this session')}
  <label>Daily viewing reminder (minutes; 0 disables) <input type="number" min="0" max="1440" value={s.reminder} onChange={e=>setting('reminder',Math.min(1440,Math.max(0,Math.floor(Number(e.target.value)||0))))}/></label>
  </section>

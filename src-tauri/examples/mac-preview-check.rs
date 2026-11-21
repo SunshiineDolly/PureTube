@@ -9,7 +9,7 @@ fn preview_check_result(app: tauri::AppHandle, mut report: serde_json::Value) {
     report["firstProcessId"] = serde_json::json!(std::process::id());
     std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     println!("{report}");
-    if report["videoTimeAdvanced"] == true { app.restart(); } else { app.exit(1); }
+    if report["videoTimeAdvanced"] == true && report["previewsCanBeDisabled"] == true { app.restart(); } else { app.exit(1); }
 }
 
 #[cfg(target_os = "macos")]

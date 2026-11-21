@@ -1,11 +1,13 @@
 import {isMac} from './platform'
 import {macYouTubePreviewUrl} from './youtube-embed'
 import {configureYouTubeFrame} from './youtube-embed'
-import {useEffect,useRef,useState} from 'react'
+import {createContext,useContext,useEffect,useRef,useState} from 'react'
 import {Play} from 'lucide-react'
 import type {Video} from './domain'
 import {clock} from './components'
 import {playerApi} from './player'
+
+export const VideoPreviews=createContext(true)
 
 function MacYouTubePreview({id}:{id:string}){
  const mount=useRef<HTMLSpanElement>(null)
@@ -67,6 +69,7 @@ function YouTubePreview({id}:{id:string}){
 }
 
 export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatch:(v:Video)=>void;progress?:{at:number;duration:number};checked?:string}){
+ const previews=useContext(VideoPreviews)
  const [previewId,setPreviewId]=useState<string>()
  const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined)
  const stop=()=>{
@@ -74,19 +77,20 @@ export function Thumbnail({video:v,onWatch,progress,checked}:{video:Video;onWatc
    setPreviewId(undefined)
  }
  function start(){
-   if(v.live||v.upcoming||v.scheduledAt||v.paid||!v.embeddable)return
-   if(!matchMedia('(hover:hover)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return
+   if(!previews||v.live||v.upcoming||v.scheduledAt||v.paid||!v.embeddable)return
+   if(!matchMedia('(hover:hover)').matches||(!isMac&&matchMedia('(prefers-reduced-motion:reduce)').matches))return
    clearTimeout(timer.current)
    timer.current=setTimeout(()=>setPreviewId(v.id),450)
  }
  useEffect(()=>{
+   if(!previews)stop()
    const hidden=()=>{if(document.hidden)stop()}
    document.addEventListener('visibilitychange',hidden)
    return ()=>{
      document.removeEventListener('visibilitychange',hidden)
      clearTimeout(timer.current)
    }
- },[v.id])
+ },[v.id,previews])
  return <button className="thumbnail video-thumbnail" aria-label={'Watch '+v.title} onClick={()=>{stop();onWatch(v)}} onMouseEnter={start} onMouseLeave={stop} onBlur={stop}>
    <span className="thumb-placeholder" aria-hidden="true"><Play size={21}/></span>
    {v.image&&<img src={v.image} loading="lazy" decoding="async" alt=""/>}

@@ -11,7 +11,19 @@
   }
   const native = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
   const report={engine:'native macOS WKWebView',videoTimeAdvanced:false,platform:navigator.platform,hover:matchMedia('(hover:hover)').matches,reducedMotion:matchMedia('(prefers-reduced-motion:reduce)').matches,states:[],errors:[]};
-  let first,done=false;
+  let first,done=false,checkingToggle=false;
+  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  async function checkToggle(){
+    if(checkingToggle)return;checkingToggle=true;
+    document.querySelector(".sidebar [aria-label=Settings]").click();await wait(400);
+    const label=[...document.querySelectorAll("label.toggle")].find(n=>n.textContent.includes("Play muted video previews on hover"));
+    if(!label?.querySelector("input")?.checked){report.errors.push("Preview setting missing or disabled by default");finish();return}
+    label.querySelector("input").click();await wait(200);
+    document.querySelector(".sidebar [aria-label=Home]").click();await wait(400);
+    const card=document.querySelector(".content > div:not([hidden]) .card .thumbnail");
+    card.dispatchEvent(new MouseEvent("mouseover",{bubbles:true,relatedTarget:null}));await wait(1000);
+    report.previewsCanBeDisabled=!document.querySelector(".thumbnail-preview iframe");finish();
+  }
   function finish(){if(done)return;done=true;report.frames=[...document.querySelectorAll('.thumbnail-preview iframe')].map(f=>f.src);native('preview_check_result',{report});}
   addEventListener('error',e=>report.errors.push(e.message));
   addEventListener('securitypolicyviolation',e=>report.errors.push('CSP '+e.violatedDirective+' '+e.blockedURI));
@@ -20,7 +32,7 @@
     if(e.data?.type==='viddy-native-error')report.errors.push(e.data.error);
     if(e.data?.type==='viddy-native-time'){
       if(first===undefined)first=e.data.time;
-      if(e.data.time>first+1){report.videoTimeAdvanced=true;finish();}
+      if(e.data.time>first+1){report.videoTimeAdvanced=true;void checkToggle();}
     }
   });
   const interval=setInterval(()=>{
