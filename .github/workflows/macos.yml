@@ -37,6 +37,22 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: cargo test --release --locked --target aarch64-apple-darwin --manifest-path src-tauri/Cargo.toml
+      - name: Verify real hover video in native WKWebView
+        env:
+          PURETUBE_ISOLATED_PROFILE: ${{ runner.temp }}/viddy-preview-check
+          VIDDY_PREVIEW_REPORT: ${{ runner.temp }}/viddy-preview-report.json
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin --manifest-path src-tauri/Cargo.toml --example mac-preview-check
+          python3 - <<'PY'
+          import subprocess
+          subprocess.run(['src-tauri/target/aarch64-apple-darwin/release/examples/mac-preview-check'], timeout=100, check=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Viddy-native-preview-report
+          path: ${{ runner.temp }}/viddy-preview-report.json
+          if-no-files-found: ignore
       - name: Build universal app and disk image
         run: npm run tauri build -- --ci --target universal-apple-darwin
       - name: Verify both architectures and app signature

@@ -102,7 +102,12 @@ pub async fn update_install(
     if let Some(downloads) = app.try_state::<crate::downloads::Downloads>() {
         downloads.shutdown();
     }
-    update.install(bytes).map_err(|_| "Viddy could not install the update. Try again or download the release from GitHub.".into())
+    update.install(bytes).map_err(|_| "Viddy could not install the update. Try again or download the release from GitHub.")?;
+    // The updater launches the Windows installer; macOS needs an explicit relaunch.
+    #[cfg(not(windows))]
+    app.restart();
+    #[cfg(windows)]
+    Ok(())
 }
 
 #[cfg(test)]
