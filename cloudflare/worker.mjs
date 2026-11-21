@@ -74,13 +74,13 @@ async function callback(url,env,origin,fetcher) {
   if(!pending || !validRedirect(pending.redirect_uri))fail(400,'This sign-in request expired. Return to Viddy and try again.');
   if(url.searchParams.has('error') || !code || code.length>512)fail(400,'Discord sign-in was cancelled. Return to Viddy.');
   const tokenResponse=await fetcher('https://discord.com/api/oauth2/token',{
-    method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},redirect:'error',
+    method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},redirect:'manual',
     body:new URLSearchParams({client_id:env.DISCORD_CLIENT_ID,client_secret:env.DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:origin+'/oauth/discord/callback'})
   });
   if(!tokenResponse.ok)fail(502,'Discord could not finish sign-in. Return to Viddy and try again.');
   const token=await tokenResponse.json();
   if(typeof token.access_token!=='string')fail(502,'Discord returned an invalid sign-in response.');
-  const identityResponse=await fetcher('https://discord.com/api/v10/users/@me',{headers:{Authorization:'Bearer '+token.access_token},redirect:'error'});
+  const identityResponse=await fetcher('https://discord.com/api/v10/users/@me',{headers:{Authorization:'Bearer '+token.access_token},redirect:'manual'});
   if(!identityResponse.ok)fail(502,'Discord could not verify this account.');
   const identity=await identityResponse.json();
   if(!/^\d{16,22}$/.test(identity.id??'') || typeof identity.username!=='string')fail(502,'Discord returned an invalid account.');

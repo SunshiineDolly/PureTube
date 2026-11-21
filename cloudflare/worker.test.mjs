@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {createService,digest,validRedirect,validateLibrary} from './worker.mjs';
 
 const sample=()=>({version:1,profileName:'Viddy',profileBio:'',profileEmoji:'',groups:{},follows:[],later:[],favorites:[],collections:[],history:{},progress:{},savedVideos:{}});
-function fixture() {
+function fixture({tokenRedirect=false,identityRedirect=false}={}) {
  const sql=new DatabaseSync(':memory:');
  sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
  function prepare(query) {
@@ -15,10 +15,12 @@ function fixture() {
  const env={DB:{prepare,async batch(statements){sql.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());sql.exec('COMMIT');return results}catch(e){sql.exec('ROLLBACK');throw e}}},DISCORD_CLIENT_ID:'1234567890123456',DISCORD_CLIENT_SECRET:'test-only-secret'};
  let discordUser='1234567890123456';
  const service=createService(async (url,options)=>{
-   if(url.endsWith('/oauth2/token')) {assert.equal(options.body.get('client_secret'),env.DISCORD_CLIENT_SECRET);return Response.json({access_token:'discord-test-token'})}
+   // Workers supports manual/follow, and throws before sending redirect:error.
+   assert.equal(options.redirect,'manual');
+   if(url.endsWith('/oauth2/token')) {assert.equal(options.body.get('client_secret'),env.DISCORD_CLIENT_SECRET);return tokenRedirect?new Response(null,{status:302,headers:{Location:'https://untrusted.example'}}):Response.json({access_token:'discord-test-token'})}
    assert.equal(url,'https://discord.com/api/v10/users/@me');
    assert.equal(options.headers.Authorization,'Bearer discord-test-token');
-   return Response.json({id:discordUser,username:'test-user',global_name:'Viddy test'});
+   return identityRedirect?new Response(null,{status:302,headers:{Location:'https://untrusted.example'}}):Response.json({id:discordUser,username:'test-user',global_name:'Viddy test'});
  });
  async function call(path,method='GET',data,token) {
    return service.fetch(new Request('https://viddy-sync.example'+path,{method,headers:{...(data?{'Content-Type':'application/json'}:{}),...(token?{Authorization:'Bearer '+token}:{}),'CF-Connecting-IP':'192.0.2.1'},...(data?{body:JSON.stringify(data)}:{})}),env);
@@ -33,6 +35,7 @@ function fixture() {
    assert.equal(authorize.searchParams.get('scope'),'identify');
    const path='/oauth/discord/callback?state='+authorize.searchParams.get('state')+'&code=discord-code';
    const callback=await call(path);
+   if(tokenRedirect||identityRedirect)return callback;
    assert.equal(callback.status,302);
    const target=new URL(callback.headers.get('Location'));
    assert.equal(target.origin,'http://127.0.0.1:12345');
@@ -68,6 +71,18 @@ test('desktop PKCE prevents intercepted tickets, replay, and state reuse',async(
  assert.equal(stored.token_hash,await digest(session.token));
  assert.equal(JSON.stringify(stored).includes('test-only-secret'),false);
  f.sql.close();
+});
+
+test('Discord redirects are rejected without following them or creating sessions',async()=>{
+ for(const option of [{tokenRedirect:true},{identityRedirect:true}]) {
+  const f=fixture(option);
+  const response=await f.begin();
+  assert.equal(response.status,502);
+  assert.equal(response.headers.get('Location'),null);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM sessions').get().n,0);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM users').get().n,0);
+  f.sql.close();
+ }
 });
 
 test('library reads are private and compare-and-swap prevents lost device writes',async()=>{
