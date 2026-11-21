@@ -2,7 +2,7 @@
 
 Viddy is a Windows and macOS desktop app for watching recent uploads from the YouTube channels you follow. Public feeds and the official embedded player work without a Google sign-in or API key.
 
-[Download the latest Windows version](https://github.com/SunshiineDolly/Viddy/releases/latest) · [All releases](https://github.com/SunshiineDolly/Viddy/releases)
+[Download the latest Windows or Mac version](https://github.com/SunshiineDolly/Viddy/releases/latest) · [All releases](https://github.com/SunshiineDolly/Viddy/releases)
 
 The Viddy Mac build supports Apple Silicon and Intel Macs on macOS 14+. The **Build Viddy for Mac** GitHub Actions workflow produces a universal `.dmg`. See [Mac installation, build instructions, and testing checklist](docs/MACOS-TESTING.md).
 
@@ -92,7 +92,7 @@ After verifying sign-in with an email address outside the Supabase team, publish
 .\scripts\Publish-Release.ps1 -NotesPath '.\releases\vVERSION.md'
 ```
 
-The publisher requires SunshiineDolly, uploads a draft with the installer, `.sig`, `latest.json`, and checksums, verifies all uploaded hashes, and then marks it Latest. It refuses conflicting source tags and does not overwrite release assets. The public feed works without GitHub sign-in inside the app. `Publish-GitHub.ps1` is the initial historical-archive import tool, not the regular release workflow.
+Every update must include Windows, Apple Silicon Mac and Intel Mac at the same version. The publisher rejects missing or unsigned platform entries before contacting GitHub. It requires SunshiineDolly, uploads a draft with the Windows installer, universal Mac disk image and update archive, signatures, `latest.json`, and checksums, verifies all uploaded hashes, and then marks it Latest. It refuses conflicting source tags and does not overwrite release assets. The public feed works without GitHub sign-in inside the app. `Publish-GitHub.ps1` is the initial historical-archive import tool, not the regular release workflow.
 
 ## Platform limits and data handling
 

@@ -11,6 +11,8 @@ $appName = (Get-Content (Join-Path $repo 'src-tauri/tauri.conf.json') -Raw | Con
 $installer = "${appName}_${version}_x64-setup.exe"
 $files = @($installer, "$installer.sig", 'latest.json', 'SHA256SUMS.txt')
 $manifest = Get-Content (Join-Path $bundle 'latest.json') -Raw | ConvertFrom-Json
+. (Join-Path $PSScriptRoot 'Release-Platforms.ps1')
+Assert-ReleasePlatforms -Manifest $manifest
 $artifact = $manifest.platforms.'windows-x86_64'
 if ($manifest.version -cne $version -or $artifact.url -cne "https://github.com/$name/releases/download/$tag/$installer" -or $artifact.signature -cne (Get-Content (Join-Path $bundle "$installer.sig") -Raw).Trim() -or (Get-Item (Join-Path $bundle $installer)).VersionInfo.ProductVersion -cne $version) { throw 'Version, updater manifest, signature, or installer mismatch' }
 $macPlatforms = @($manifest.platforms.PSObject.Properties.Name | Where-Object { $_ -like 'darwin-*' })

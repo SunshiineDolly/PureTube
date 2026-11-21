@@ -529,3 +529,13 @@
 .playlist-feedback[role=alert]{color:var(--text)}
 .playlist-saver-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .playlist-saver-actions .playlist-new{margin-right:auto}
+
+/* Show complete category choices; additional topics live in a named menu. */
+.category-carousel{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+.category-track{display:contents}
+.category-carousel .category-chip{min-height:38px;max-width:100%;padding:8px 14px;gap:7px;white-space:normal}
+.category-carousel .category-chip span{overflow-wrap:anywhere}
+.category-carousel .category-more-select{height:38px;min-height:38px;width:auto;max-width:100%;border-radius:99px;background:var(--panel);padding:7px 12px;color:var(--sub);font-size:12px}
+.home-browse-heading{align-items:flex-start;gap:16px}
+.home-browse-heading .category-carousel{flex:1}
+.home-browse-heading .new-mix-button{min-height:38px;flex:none;gap:6px;font-size:12px;padding:8px 12px}
