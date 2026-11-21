@@ -7,7 +7,7 @@
       const player = window.viddyPreviewPlayer;
       if (player?.getCurrentTime) parent.postMessage({type:'viddy-native-time',time:player.getCurrentTime()}, '*');
     }, 500);
-    if(location.hostname==='www.youtube.com'&&location.pathname.startsWith('/embed/'))setInterval(()=>top.postMessage({type:'viddy-native-page',text:document.body?.innerText.slice(0,1200)},'*'),1500);
+    if(location.hostname==='www.youtube.com'&&location.pathname.startsWith('/embed/'))setInterval(()=>top.postMessage({type:'viddy-native-page',text:document.body?.innerText.slice(0,1200),status:window.ytInitialPlayerResponse?.playabilityStatus??window.ytplayer?.config?.args?.raw_player_response?.playabilityStatus},'*'),250);
     return;
   }
   const native = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
@@ -29,8 +29,8 @@
   addEventListener('error',e=>report.errors.push(e.message));
   addEventListener('securitypolicyviolation',e=>report.errors.push('CSP '+e.violatedDirective+' '+e.blockedURI));
   addEventListener('message',e=>{
-    if(e.data?.type==='viddy-video-preview'){report.states.push({state:e.data.state,code:e.data.code});if(e.data.state==='error'||e.data.state==='blocked')setTimeout(finish,3500)}
-    if(e.data?.type==='viddy-native-page')report.playerText=e.data.text;
+    if(e.data?.type==='viddy-video-preview'){report.states.push({state:e.data.state,code:e.data.code});if(e.data.state==='error'||e.data.state==='blocked'){e.stopImmediatePropagation();report.playerRejected=true;setTimeout(finish,3500)}}
+    if(e.data?.type==='viddy-native-page'){report.playerText=e.data.text;report.playerStatus=e.data.status};
     if(e.data?.type==='viddy-native-error')report.errors.push(e.data.error);
     if(e.data?.type==='viddy-native-time'){
       if(first===undefined)first=e.data.time;
