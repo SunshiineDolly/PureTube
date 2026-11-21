@@ -54,17 +54,25 @@ try {
  await call('Page.addScriptToEvaluateOnNewDocument',{source:fixture})
  await call('Page.navigate',{url:'http://127.0.0.1:'+web.address().port})
  await eventually(()=>value('!!document.querySelector(".sidebar [aria-label=Settings]:not(:disabled)")'))
- report.viewports=[];
+ report.version='0.26.4';report.viewports=[];
  for(const [width,height] of [[820,560],[1024,600],[1280,720],[1622,900],[1920,1080]]){
   await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await wait(100);
-  const layout=await value('(()=>{const rail=document.querySelector(".home-browse-heading .category-carousel"),r=rail.getBoundingClientRect(),chips=[...rail.querySelectorAll("button,select")];return {width:innerWidth,wholeChoices:chips.every(c=>{const b=c.getBoundingClientRect();return b.left>=r.left-1&&b.right<=r.right+1&&b.top>=r.top-1&&b.bottom<=r.bottom+1}),noOverflow:rail.scrollWidth<=rail.clientWidth+1,noArrows:!rail.querySelector(".carousel-arrow"),morePresent:!!rail.querySelector(".category-more-select"),newMixVisible:document.querySelector(".new-mix-button").getBoundingClientRect().right<=innerWidth}})()');
-  console.log(layout);assert(layout.wholeChoices&&layout.noOverflow&&layout.noArrows&&layout.morePresent&&layout.newMixVisible);report.viewports.push(layout);
+  const layout=await value('(()=>{const bar=document.querySelector(".home-browse-heading"),r=bar.getBoundingClientRect(),chips=[...bar.querySelectorAll("button")],mix=bar.querySelector(".new-mix-button").getBoundingClientRect(),picker=bar.querySelector(".category-picker-trigger").getBoundingClientRect();return {width:innerWidth,wholeChoices:chips.every(c=>{const b=c.getBoundingClientRect();return b.left>=r.left-1&&b.right<=r.right+1&&b.top>=r.top-1&&b.bottom<=r.bottom+1}),noOverflow:bar.scrollWidth<=bar.clientWidth+1,noArrows:!bar.querySelector(".carousel-arrow"),pickerPresent:!!bar.querySelector(".category-picker-trigger"),newMixNearby:Math.abs(mix.top-picker.top)>10||mix.left-picker.right<20}})()');
+  console.log(layout);assert(layout.wholeChoices&&layout.noOverflow&&layout.noArrows&&layout.pickerPresent&&layout.newMixNearby);report.viewports.push(layout);
+  await value('document.querySelector(".home-browse-heading .category-picker-trigger").click()');await eventually(()=>value('!!document.querySelector(".category-popover")'));
+  assert(await value('(()=>{const r=document.querySelector(".category-popover").getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight})()'));
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});await eventually(()=>value('!document.querySelector(".category-popover")'));
  }
- await value('(()=>{const menu=document.querySelector(".home-browse-heading .category-more-select");menu.value="Space";menu.dispatchEvent(new Event("change",{bubbles:true}))})()');
+ await value('document.querySelector(".home-browse-heading .category-picker-trigger").click()');await eventually(()=>value('!!document.querySelector(".category-popover")'));
+ await value('[...document.querySelectorAll(".category-menu-grid button")].find(b=>b.textContent==="Space").click()');
  await eventually(()=>value('[...document.querySelectorAll(".home-browse-heading .category-chip[aria-pressed=true]")].some(b=>b.textContent==="Space")'));
- assert.equal(await value('document.querySelector(".home-browse-heading .category-more-select").value'),'');
- await call('Page.captureScreenshot',{format:'png'}).then(r=>writeFileSync('artifacts/category-bar-ui.png',Buffer.from(r.data,'base64')));
- report.extraTopicSelectable=true;report.selectedTopicVisible=true;writeFileSync('artifacts/category-bar-verification.json',JSON.stringify(report,null,2));
+ assert.equal(await value('!!document.querySelector(".category-popover")'),false);
+ await call('Emulation.setDeviceMetricsOverride',{width:1280,height:720,deviceScaleFactor:1,mobile:false});await wait(100);
+ await call('Page.captureScreenshot',{format:'png'}).then(r=>writeFileSync('artifacts/category-toolbar-0.26.4.png',Buffer.from(r.data,'base64')));
+ await value('document.querySelector(".home-browse-heading .category-picker-trigger").click()');await eventually(()=>value('!!document.querySelector(".category-popover")'));
+ await call('Page.captureScreenshot',{format:'png'}).then(r=>writeFileSync('artifacts/category-picker-0.26.4.png',Buffer.from(r.data,'base64')));
+ const outside=await value('(()=>{return {x:innerWidth-8,y:innerHeight-8}})()');await call('Input.dispatchMouseEvent',{type:'mousePressed',...outside,button:'left',clickCount:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',...outside,button:'left',clickCount:1});await eventually(()=>value('!document.querySelector(".category-popover")'));
+ report.extraTopicSelectable=true;report.selectedTopicVisible=true;report.escapeAndOutsideDismiss=true;writeFileSync('artifacts/category-bar-verification.json',JSON.stringify(report,null,2));
 } finally {
  try{await call('Browser.close')}catch{child.kill()}
  ws?.close()

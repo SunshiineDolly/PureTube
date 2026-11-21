@@ -539,3 +539,24 @@
 .home-browse-heading{align-items:flex-start;gap:16px}
 .home-browse-heading .category-carousel{flex:1}
 .home-browse-heading .new-mix-button{min-height:38px;flex:none;gap:6px;font-size:12px;padding:8px 12px}
+
+/* One compact toolbar, with a matching category picker and nearby refresh action. */
+.category-carousel,.home-browse-heading{width:fit-content;max-width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:4px;padding:6px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
+.home-browse-heading .category-carousel{display:contents}
+.category-carousel .category-chip,.category-picker-trigger,.home-browse-heading .new-mix-button{min-height:34px;border-radius:8px;padding:7px 11px;font-size:13px;line-height:18px;gap:6px;box-shadow:none}
+.category-carousel .category-chip{border-color:transparent;background:transparent;color:var(--sub);font-weight:550}
+.category-carousel .category-chip[aria-pressed=true]{background:var(--a);color:var(--ink);box-shadow:none;border-color:transparent}
+.category-carousel .category-chip:hover:not([aria-pressed=true]){background:var(--hover);color:var(--text)}
+.category-picker-trigger{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);background:var(--raised);color:var(--text);white-space:nowrap}
+.category-picker-trigger[aria-expanded=true]{background:var(--hover)}
+.home-browse-heading .new-mix-button{border:0;border-left:1px solid var(--border);border-radius:0 7px 7px 0;margin-left:4px;background:transparent;color:var(--sub)}
+.category-popover{position:fixed;z-index:110;overflow:auto;background:var(--raised);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 12px 36px #0005}
+.category-popover header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px;padding:0 3px;font-size:13px;color:var(--text)}
+.category-popover header .icon{width:28px;height:28px}
+.category-menu-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.category-menu-grid button{display:flex;align-items:center;gap:9px;min-height:38px;padding:8px 10px;border-radius:8px;text-align:left;color:var(--sub);font-size:13px;min-width:0}
+.category-menu-grid button:hover{background:var(--hover);color:var(--text)}
+.category-menu-grid button[aria-pressed=true]{background:var(--wash);color:var(--text)}
+.category-menu-grid button span{overflow-wrap:anywhere}
+.category-menu-dot{width:16px;height:16px;flex:none;display:grid;place-items:center}
+.category-menu-dot:after{content:'';width:4px;height:4px;border-radius:50%;background:currentColor}
