@@ -560,3 +560,8 @@
 .category-menu-grid button span{overflow-wrap:anywhere}
 .category-menu-dot{width:16px;height:16px;flex:none;display:grid;place-items:center}
 .category-menu-dot:after{content:'';width:4px;height:4px;border-radius:50%;background:currentColor}
+
+.thumbnail>.thumbnail-motion-preview{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;overflow:hidden}
+.thumbnail>.thumbnail-motion-preview[data-ready=true]{opacity:1}
+.thumbnail-motion-preview>img,.thumbnail-motion-preview>span{display:block;width:100%;height:100%;object-fit:cover;background-repeat:no-repeat}
+.thumbnail>.thumbnail-preview{z-index:3}
