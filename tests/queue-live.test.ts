@@ -2,6 +2,7 @@ import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {moveQueue,removeQueue} from '../src/queue-edit.ts'
 import {mixLive} from '../src/live-mix.ts'
+import {makeSources} from '../src/live-sources.ts'
 import type {Video} from '../src/domain.ts'
 test('queue edits retain the playing item and choose a neighbor when it is removed',()=>{
  const q={name:'Queue',ids:['a','b','c'],index:1,repeat:false}
@@ -16,4 +17,18 @@ test('All streams interleaves categories even when Gaming has many more creators
  const items=[...Array.from({length:20},(_,n)=>v(n,'Gaming')),v(21,'Music'),v(22,'Nature'),v(23,'News')]
  assert.deepEqual(mixLive(items,'live','').slice(0,4).map(v=>v.category),['Gaming','Music','Nature','News'])
  assert.ok(mixLive(items.filter(v=>v.category==='Gaming'),'live','Gaming').every(v=>v.category==='Gaming'))
+})
+
+test('scheduled streams show the earliest start first and unknown times last',()=>{
+ const v=(id:string,category:string,at?:number):Video=>({id,category,channelId:id,channel:id,title:id,description:'',date:'',image:'',duration:0,shorts:false,paid:false,embeddable:true,upcoming:true,scheduledAt:at})
+ const result=mixLive([v('late','Music',300),v('unknown','Gaming'),v('soon','Music',100),v('next','Sports',200),{...v('already-live','News',50),live:true}],'scheduled','')
+ assert.deepEqual(result.map(v=>v.id),['soon','next','late','unknown'])
+})
+
+test('scheduled discovery includes every followed channel beyond the old first 30',()=>{
+ const follows=Array.from({length:85},(_,i)=>'UC'+String(i).padStart(22,'0'))
+ const sources=makeSources('scheduled','',follows)
+ assert.deepEqual(new Set(sources.filter(s=>s.topic==='Following').map(s=>s.channel)),new Set(follows))
+ assert(sources.some(s=>s.topic==='Music'&&s.channel))
+ assert(sources.some(s=>s.query&&s.topic==='Nature'))
 })

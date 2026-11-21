@@ -542,6 +542,9 @@ fn result_items(item: &Value, depth: u8) -> Vec<Value> {
             item.pointer("/gridShelfViewModel/contents")
                 .and_then(Value::as_array)
         })
+        .or_else(|| item.pointer("/sectionListRenderer/contents").and_then(Value::as_array))
+        .or_else(|| item.pointer("/richGridRenderer/contents").and_then(Value::as_array))
+        .or_else(|| item.pointer("/gridRenderer/items").and_then(Value::as_array))
     {
         return children
             .iter()
@@ -612,10 +615,8 @@ pub async fn scheduled_channel(state: State<'_, AppData>, channel: String) -> Re
         .find_map(|layout| contents[layout]["tabs"].as_array())
         .into_iter().flatten().map(|tab| &tab["tabRenderer"])
         .find(|tab| tab["selected"] == true);
-    let rows = selected.and_then(|tab| {
-        tab.pointer("/content/richGridRenderer/contents").and_then(Value::as_array)
-    });
-    Ok(search_items(rows.map(Vec::as_slice).unwrap_or_default(), "scheduled")
+    let rows = selected.map(|tab| &tab["content"]).into_iter().cloned().collect::<Vec<_>>();
+    Ok(search_items(&rows, "scheduled")
         .into_iter().map(|mut item| {
             if channel_key(&item["channelId"]).is_none() { item["channelId"] = json!(id); }
             if item["channel"].as_str().is_none_or(str::is_empty) { item["channel"] = json!(name); }
@@ -635,22 +636,33 @@ pub async fn live_status(state: State<'_, AppData>, id: String, details: Option<
         .map_err(|_| "Invalid video ID.")?;
     let html = public_page(&state.client, url).await?;
     let data = embedded_json(&html, "var ytInitialPlayerResponse")?;
+    let (state, start) = stream_state(&data);
+    Ok(if details == Some(true) {
+        json!({"status":state,"start":start})
+    } else {
+        json!(state)
+    })
+}
+
+fn stream_state(data: &Value) -> (&'static str, Option<&str>) {
     let status = &data["playabilityStatus"]["status"];
     let live = &data["microformat"]["playerMicroformatRenderer"]["liveBroadcastDetails"];
-    let state = if live["isLiveNow"] == true || data["videoDetails"]["isLive"] == true {
+    let state = if live["isLiveNow"] == true {
             "live"
         } else if live["endTimestamp"].is_string() {
             "ended"
-        } else if status == "LIVE_STREAM_OFFLINE" || live["startTimestamp"].is_string() {
+        } else if status == "LIVE_STREAM_OFFLINE" || data["videoDetails"]["isUpcoming"] == true {
+            "waiting"
+        } else if data["videoDetails"]["isLive"] == true {
+            "live"
+        } else if status == "OK" && data["videoDetails"]["videoId"].is_string() {
+            "ended"
+        } else if live["startTimestamp"].is_string() {
             "waiting"
         } else {
             "unknown"
         };
-    Ok(if details == Some(true) {
-        json!({"status":state,"start":live["startTimestamp"].as_str()})
-    } else {
-        json!(state)
-    })
+    (state, live["startTimestamp"].as_str())
 }
 
 pub(crate) fn client_version(html: &str) -> &str {
@@ -1021,6 +1033,31 @@ mod tests {
         assert_eq!(cards[0]["title"], "NASA's broadcast");
         assert_eq!(cards[0]["scheduledAt"], 1_795_193_100_000_u64);
         assert!(search_items(&rows, "live").is_empty());
+    }
+
+    #[test]
+    fn scheduled_cards_are_found_in_mobile_sections_and_desktop_grids() {
+        let card = json!({"videoRenderer":{"videoId":"fTDvp9CBXoQ","title":{"simpleText":"Upcoming event"},"upcomingEventData":{"startTime":"1795193100"}}});
+        let mobile = json!({"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[card.clone()]}}]}});
+        let desktop = json!({"richGridRenderer":{"contents":[{"richItemRenderer":{"content":card}}]}});
+        for layout in [mobile, desktop] {
+            let cards = search_items(&[layout], "scheduled");
+            assert_eq!(cards.len(), 1);
+            assert_eq!(cards[0]["scheduledAt"], 1_795_193_100_000_u64);
+        }
+    }
+
+    #[test]
+    fn stream_states_distinguish_waiting_live_and_finished_broadcasts() {
+        let mut data = json!({"videoDetails":{"videoId":"fTDvp9CBXoQ","isUpcoming":true},"playabilityStatus":{"status":"LIVE_STREAM_OFFLINE"}});
+        assert_eq!(stream_state(&data).0, "waiting");
+        data["microformat"] = json!({"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":true}}});
+        assert_eq!(stream_state(&data).0, "live");
+        data["videoDetails"]["isLive"] = json!(true);
+        data["microformat"]["playerMicroformatRenderer"]["liveBroadcastDetails"] = json!({"endTimestamp":"2026-11-20T18:00:00Z"});
+        assert_eq!(stream_state(&data).0, "ended");
+        assert_eq!(stream_state(&json!({"videoDetails":{"videoId":"fTDvp9CBXoQ"},"playabilityStatus":{"status":"OK"}})).0, "ended");
+        assert_eq!(stream_state(&json!({})).0, "unknown");
     }
 
     #[test]

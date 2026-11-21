@@ -1,5 +1,5 @@
 import {LiveBrowser,ScheduledReminders} from './live-browser'
-import {useEffect,useRef,useState} from 'react'
+import {useState} from 'react'
 import {AutoMore,Empty,Loading} from './components'
 import {RecentFeed} from './discover'
 import {Grid,Heading,Notice,type Shared} from './screens'
@@ -15,22 +15,16 @@ export function SearchPage({query,shared,liveOnly=false,selectedSource,onSourceC
  const [draft,setDraft]=useState(liveQuery)
  const effective=liveOnly?liveQuery||(mode==='scheduled'?'upcoming live stream':query):query
  const catalog=useCatalog(effective,source==='feeds'?'latest':source,source!=='feeds'&&(!liveOnly||!!liveQuery))
- const reload=useRef(catalog.reload);reload.current=catalog.reload
- useEffect(()=>{
-   if(!liveOnly)return
-   const timer=setInterval(()=>{if(!document.hidden)reload.current()},60_000)
-   return ()=>clearInterval(timer)
- },[liveOnly])
  const matches=catalog.items?.filter(v=>visible(v,shared.data.settings))
  if(source==='latest')matches?.sort(publicNewest)
- if(source==='scheduled')matches?.sort((a,b)=>(a.scheduledAt??0)-(b.scheduledAt??0))
+ if(source==='scheduled')matches?.sort((a,b)=>(a.scheduledAt??Infinity)-(b.scheduledAt??Infinity))
  if(liveOnly&&!liveQuery)return <LiveBrowser shared={shared} mode={mode} onMode={onMode} onSearch={onLiveQuery}/>
  return <div className="studio-discover">
    <Heading label={liveOnly?'ON AIR':'SEARCH'} title={liveOnly?'Live streams':'Search results'} detail={liveOnly?'Find a public stream and watch it here.':`Videos matching “${query}”`}/>
    {liveOnly&&<><button className="button" onClick={()=>onLiveQuery?.('')}>Browse all streams</button><FollowedLiveShelf shared={shared}/></>}
    {liveOnly?<><div className="row search-banner" aria-label="Live filters">{(['live','scheduled'] as const).map(value=><button className="category-chip" key={value} aria-pressed={mode===value} onClick={()=>onMode?.(value)}>{value==='live'?'Live now':'Scheduled'}</button>)}</div><form className="row search-banner" onSubmit={e=>{e.preventDefault();onLiveQuery?.(draft.trim())}}>
      <input aria-label="Search live streams" placeholder="Try lofi radio, gaming, or news" maxLength={256} value={draft} onChange={e=>setDraft(e.target.value)}/>
-     <button className="button accent">Find streams</button>
+     <button className="button accent">Find streams</button><button type="button" className="button" onClick={catalog.reload}>Refresh results</button>
    </form></>:<div className="row wrap search-banner" aria-label="Search source">
      {filters.map(([key,label])=><button key={key} className="category-chip" aria-pressed={source===key} onClick={()=>onSourceChange?.(key)}>{label}</button>)}
    </div>}

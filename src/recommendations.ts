@@ -124,14 +124,30 @@ export function rankRecommendations(items:Video[],data:Library,seen:Record<strin
 }
 
 export function appendRecommendations(existing:Video[],incoming:Video[],limit=Infinity){
- const counts=new Map<string,number>(),ids=new Set<string>(),titles=new Set<string>()
- const result:Video[]=[]
- for(const v of [...existing,...incoming]){
-   const creator=v.channelId||v.channel
-   const title=v.title.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()
-   if(ids.has(v.id)||titles.has(title)||(counts.get(creator)??0)>=2)continue
-   ids.add(v.id);titles.add(title);counts.set(creator,(counts.get(creator)??0)+1);result.push(v)
+ const result=unique(existing).slice(0,limit),ids=new Set(result.map(v=>v.id))
+ const recent=result.slice(-24)
+ const titleKey=(v:Video)=>v.title.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()
+ for(const v of incoming){
    if(result.length>=limit)break
+   const creator=v.channelId||v.channel
+   if(ids.has(v.id)||recent.some(item=>titleKey(item)===titleKey(v))||recent.filter(item=>(item.channelId||item.channel)===creator).length>=2)continue
+   ids.add(v.id);result.push(v);recent.push(v)
+   if(recent.length>24)recent.shift()
  }
  return result
+}
+
+// Explore the graph of creators and subjects already found instead of replaying
+// the same first search pages after all continuations have been consumed.
+export function expandRecommendationPlan(data:Library,surface:Surface,seed:number,items:Video[],searched:ReadonlySet<string>){
+ const plan=recommendationPlan(data,surface,seed)
+ for(const video of items){
+   const topic=video.category??categoryFor(video)??'Explore'
+   if(video.channel&&video.channel!=='Creator')plan.push({topic,query:Array.from(video.channel+' videos').slice(0,256).join(''),filter:'latest'})
+   const subject=Array.from(relatedQuery(video)).slice(0,256).join('')
+   if(subject.split(' ').length>=2)plan.push({topic,query:subject,filter:'all'})
+ }
+ const fresh=plan.filter(source=>!searched.has(source.filter+':'+source.query))
+ const seen=new Set<string>()
+ return fresh.filter(source=>{const key=source.filter+':'+source.query;if(seen.has(key))return false;seen.add(key);return true}).slice(0,8)
 }

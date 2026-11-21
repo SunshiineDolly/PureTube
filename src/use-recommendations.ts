@@ -1,11 +1,11 @@
 import {useEffect,useRef,useState} from 'react'
 import {requestCatalog,type CatalogPage} from './catalog'
 import {errorText,type Video} from './domain'
-import {appendRecommendations,recommendationPlan,rankRecommendations,type Surface} from './recommendations'
+import {appendRecommendations,expandRecommendationPlan,recommendationPlan,rankRecommendations,type Surface} from './recommendations'
 import type {Library} from './library'
 
-type Source={topic:string;query:string;filter:'all'|'latest';next:CatalogPage['next'];loaded:boolean}
-type Feed={items:Video[];sources:Source[];seed:number;at:number;error?:string;busy:boolean;moreError?:string}
+type Source={topic:string;query:string;filter:'all'|'latest';next:CatalogPage['next'];loaded:boolean;visited?:Set<string>}
+type Feed={items:Video[];sources:Source[];seed:number;at:number;searched?:Set<string>;error?:string;busy:boolean;moreError?:string}
 const sessions=new Map<Surface,Feed>()
 export const recommendationIds=(surface:Surface)=>new Set(sessions.get(surface)?.items.map(v=>v.id)??[])
 const exposures:Record<string,number>={}
@@ -59,7 +59,8 @@ export function useRecommendations(surface:Surface,data:Library){
    // even if the pointer never intersected its cards.
    if(iteration>0)prior.forEach(id=>{seen[id]=Date.now()})
    const sources:Source[]=plan.map(p=>({...p,next:null,loaded:false}))
-   store({items:cached?.items??[],sources,seed,at:Date.now(),busy:true})
+   const searched=new Set(plan.map(s=>s.filter+':'+s.query))
+   store({items:cached?.items??[],sources,seed,searched,at:Date.now(),busy:true})
    void Promise.allSettled(plan.map(source => requestCatalog(source.query, source.filter, null, iteration > 0))).then(results => {
      if (!active || generation.current !== run) return
      const pool:Video[]=[]
@@ -72,7 +73,7 @@ export function useRecommendations(surface:Surface,data:Library){
        pool.push(...result.value.items.map(video=>({...video,category:source.topic})))
      })
      store({items:success?rankRecommendations(pool,current.current,seen,seed,other(),surface==='home'?96:144,surface):cached?.items??[],
-       sources,seed,at:Date.now(),busy:false,error:success?undefined:error})
+       sources,seed,searched,at:Date.now(),busy:false,error:success?undefined:error})
    })
    return ()=>{active=false;generation.current++}
  },[surface,iteration])
@@ -84,8 +85,12 @@ export function useRecommendations(surface:Surface,data:Library){
    let base=activeFeed
    if(sourceIndex<0){
      const seed=activeFeed.seed+1
-     const fresh=recommendationPlan(current.current,surface,seed).map(source=>({...source,next:null,loaded:false}))
-     base={...activeFeed,seed,sources:fresh};sourceIndex=0
+     const searched=new Set(activeFeed.searched)
+     let plan=expandRecommendationPlan(current.current,surface,seed,activeFeed.items,searched)
+     if(!plan.length)plan=recommendationPlan(current.current,surface,seed)
+     plan.forEach(s=>searched.add(s.filter+':'+s.query))
+     const fresh:Source[]=plan.map(source=>({...source,next:null,loaded:false}))
+     base={...activeFeed,seed,sources:fresh,searched};sourceIndex=0
    }
    nextSource.current=(sourceIndex+1)%base.sources.length
    const source=base.sources[sourceIndex]
@@ -93,12 +98,15 @@ export function useRecommendations(surface:Surface,data:Library){
    const run=generation.current
    store({...base,busy:true,moreError:undefined})
    try{
+     const visited=new Set(source.visited)
+     if(source.next)visited.add(source.next.token)
      let page=await requestCatalog(source.query,source.filter,source.next)
      const existing=new Set(sessionRef.current?.items.map(v=>v.id)??[])
      const exclusions=new Set([...other(),...existing])
      let candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,base.seed,exclusions,30,surface)
-     for(let skip=0;!candidates.length&&page.next&&skip<2;skip++){
+     for(let skip=0;!candidates.length&&page.next&&!visited.has(page.next.token)&&skip<2;skip++){
        const cursor=page.next
+       visited.add(cursor.token)
        page=await requestCatalog(source.query,source.filter,cursor)
        candidates=rankRecommendations(page.items.map(v=>({...v,category:source.topic})),current.current,exposures,base.seed,exclusions,30,surface)
        if(page.next?.token===cursor.token){page={...page,next:null};break}
@@ -106,7 +114,7 @@ export function useRecommendations(surface:Surface,data:Library){
      if(generation.current!==run)return
      const latest=sessionRef.current!
      const sources=[...latest.sources]
-     sources[sourceIndex]={...source,loaded:true,next:page.next?.token===source.next?.token?null:page.next}
+     sources[sourceIndex]={...source,visited,loaded:true,next:page.next&& !visited.has(page.next.token)?page.next:null}
      const items=appendRecommendations(latest.items,candidates)
      emptyBatches.current=items.length===latest.items.length?emptyBatches.current+1:0
      store({...latest,items,sources,busy:false,moreError:emptyBatches.current>=4?'No new matches in this mix. Choose another category or try a new mix.':undefined})

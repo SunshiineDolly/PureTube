@@ -1,6 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {appendRecommendations,rankRecommendations,recommendationPlan,viewingTaste} from '../src/recommendations.ts'
+import {appendRecommendations,expandRecommendationPlan,rankRecommendations,recommendationPlan,viewingTaste} from '../src/recommendations.ts'
 import {decode,empty,recordViewing} from '../src/library.ts'
 import {visible,type Video} from '../src/domain.ts'
 
@@ -46,6 +46,27 @@ test('discovery appends beyond the former 150-video ceiling without duplicates',
  const combined=appendRecommendations(first,[...first.slice(0,5),...next])
  assert.equal(combined.length,260)
  assert.equal(new Set(combined.map(v=>v.id)).size,260)
+})
+
+test('long discovery sessions keep all results and allow creators back after other videos',()=>{
+ const first=[video(1,'returning'),video(2,'returning'),...Array.from({length:10_000},(_,i)=>video(100+i))]
+ const result=appendRecommendations(first,[video(20_001,'returning'),video(20_002,'returning'),video(20_003,'returning'),first[0]])
+ assert.equal(result.length,10_004)
+ assert.deepEqual(result.slice(-2).map(v=>v.id),[video(20_001).id,video(20_002).id])
+ assert.equal(new Set(result.map(v=>v.id)).size,result.length)
+ assert.deepEqual(result.slice(0,first.length),first)
+})
+
+test('exhausted discovery searches expand into new creators and subjects without replaying queries',()=>{
+ const data=empty(),searched=new Set(recommendationPlan(data,'discover',1).map(s=>s.filter+':'+s.query))
+ const items=Array.from({length:40},(_,n)=>({...video(n),title:'Painting watercolor landscape technique '+n}))
+ for(let round=0;round<12;round++){
+  const plan=expandRecommendationPlan(data,'discover',1,items,searched)
+  assert.ok(plan.length>0)
+  for(const source of plan){const key=source.filter+':'+source.query;assert(!searched.has(key));searched.add(key)}
+  items.push(...Array.from({length:12},(_,n)=>({...video(1000+round*12+n),title:'Newly found creator subject '+round+' '+n})))
+ }
+ assert(searched.size>80)
 })
 test('turning off history also stops using retained interests to select query sources',()=>{
  const data=empty(),plain=empty();data.interests.Gaming=15;data.settings.history=false;plain.settings.history=false

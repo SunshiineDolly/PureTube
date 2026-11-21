@@ -4,6 +4,7 @@ import {Bell} from 'lucide-react'
 import {rememberVideo,type Library} from './library'
 import {linkVideo} from './public-feeds'
 import type {Video} from './domain'
+import {useCountdownClock} from './countdown-clock'
 
 type LiveStatus='live'|'waiting'|'ended'|'unknown'
 type StreamStatus={status:LiveStatus;start?:string}
@@ -15,16 +16,16 @@ export function checkLive(id:string){
 }
 
 export function useScheduledStatus(id:string,at?:number|null,upcoming=false){
- const [status,setStatus]=useState<LiveStatus>('waiting')
+ const [checked,setChecked]=useState<{id:string;status:LiveStatus}>({id,status:'waiting'})
  useEffect(()=>{
    if(!at&&!upcoming)return
    let active=true
-   const poll=()=>{if(!at||Date.now()>=at-60_000)void checkLive(id).then(({status})=>{if(active&&status!=='unknown')setStatus(status)})}
+   const poll=()=>{if(!at||Date.now()>=at-60_000)void checkLive(id).then(({status})=>{if(active&&status!=='unknown')setChecked({id,status})})}
    poll()
    const timer=setInterval(poll,15_000)
    return ()=>{active=false;clearInterval(timer)}
  },[id,at,upcoming])
- return status
+ return checked.id===id?checked.status:'waiting'
 }
 
 export function useLiveReminders(data:Library,change:(fn:(d:Library)=>Library)=>void,ready:boolean){
@@ -82,9 +83,8 @@ export function reminderVideos(data:Library):Video[]{
 }
 
 export function ScheduledDetails({video,data,change,status='waiting'}:{video:Video;data:Library;change:(fn:(d:Library)=>Library)=>void;status?:LiveStatus}){
- const [now,setNow]=useState(Date.now)
  const at=data.liveReminders[video.id]?.at??video.scheduledAt
- useEffect(()=>{if(!at||status!=='waiting')return;const timer=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(timer)},[at,status])
+ const now=useCountdownClock(at)
  if(status!=='waiting')return null
  if(!at)return video.upcoming?<div className="schedule-details"><strong>Start time not posted yet</strong></div>:null
  const seconds=Math.ceil(Math.max(0,at-now)/1000),d=Math.floor(seconds/86400),h=Math.floor(seconds/3600)%24,m=Math.floor(seconds/60)%60,s=seconds%60
