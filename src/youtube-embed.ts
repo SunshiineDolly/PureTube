@@ -21,3 +21,13 @@ export async function configureYouTubeFrame(frame: HTMLIFrameElement, id: string
    frame.srcdoc = `<!doctype html><meta http-equiv="refresh" content="0;url=${redirect.href}">`
  }
 }
+
+export async function macYouTubePreviewUrl(id:string){
+ if(!/^[\w-]{11}$/.test(id))throw Error('Invalid preview video.')
+ embedPort??=invoke<number>('youtube_embed_port').catch(error=>{embedPort=undefined;throw error})
+ const port=await embedPort
+ if(!Number.isInteger(port)||port<1||port>65535)throw Error('Invalid preview player address.')
+ const url=new URL('http://127.0.0.1:'+port+'/preview')
+ url.searchParams.set('id',id)
+ return url.href
+}

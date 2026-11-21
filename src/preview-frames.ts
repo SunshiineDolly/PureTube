@@ -16,12 +16,3 @@ export function previewFrames(spec:string){
  }
  try{frame(0);return {frame,count:level.count}}catch{return}
 }
-
-export function animatedPreviewUrl(id:string,source?:string){
- if(!source||!/^[\w-]{11}$/.test(id))return
- try{
-  const url=new URL(source)
-  if(url.protocol!=='https:'||url.hostname!=='i.ytimg.com'||url.port||url.username||url.password||!url.pathname.startsWith('/an_webp/'+id+'/'))return
-  return url.href
- }catch{return}
-}

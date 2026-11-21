@@ -51,6 +51,11 @@ fn serve(mut stream: TcpStream, port: u16) -> std::io::Result<()> {
             }
         }
     }
+    let path = request.strip_prefix("GET ").and_then(|r| r.split_once(' ')).map(|(path, _)| path);
+    if let Some(id) = path.and_then(|p| p.strip_prefix("/preview?")).filter(|_| valid_host).and_then(preview_id) {
+        let page = preview_page(&id, port);
+        return write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nReferrer-Policy: strict-origin-when-cross-origin\r\nContent-Security-Policy: default-src 'none'; script-src 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube.com; style-src 'unsafe-inline'\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{page}", page.len());
+    }
     let target = request.strip_prefix("GET ")
         .and_then(|request| request.split_once(' '))
         .and_then(|(path, _)| path.strip_prefix("/youtube?"))
@@ -65,6 +70,16 @@ fn serve(mut stream: TcpStream, port: u16) -> std::io::Result<()> {
     let escaped = target.as_str().replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;");
     let page = format!("<!doctype html><meta charset=utf-8><meta http-equiv=refresh content=\"0;url={escaped}\">");
     write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nReferrer-Policy: strict-origin-when-cross-origin\r\nContent-Security-Policy: default-src 'none'\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{page}", page.len())
+}
+
+fn preview_id(query: &str) -> Option<String> {
+    let url = Url::parse(&format!("http://localhost/?{query}")).ok()?;
+    let (_, id) = url.query_pairs().find(|(key, _)| key == "id")?;
+    (id.len() == 11 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')).then(|| id.into_owned())
+}
+
+fn preview_page(id: &str, port: u16) -> String {
+    include_str!("preview-player.html").replace("{{ID}}", id).replace("{{PORT}}", &port.to_string())
 }
 
 fn embed_target(query: &str) -> Option<Url> {
@@ -83,6 +98,39 @@ fn embed_target(query: &str) -> Option<Url> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_page_uses_real_muted_video_and_a_matching_http_origin() {
+        let page = preview_page("jNQXAC9IVRw", 4321);
+        assert!(page.contains("https://www.youtube.com/embed/jNQXAC9IVRw"));
+        assert!(page.contains("origin=http%3A%2F%2F127.0.0.1%3A4321"));
+        assert!(page.contains("event.target.mute();event.target.playVideo()"));
+        assert!(page.contains("onAutoplayBlocked"));
+        assert!(!page.contains("tauri://"));
+        assert!(!page.contains("{{ID}}"));
+        for invalid in ["id=bad", "id=jNQXAC9IVRw%22%3E", "id=https://example.com", "id=../jNQXAC9IVRw"] {
+            assert!(preview_id(invalid).is_none());
+        }
+    }
+
+    #[test]
+    fn preview_route_requires_loopback_host_and_returns_the_player_page() {
+        use std::io::Read;
+        fn get(host: Option<&str>) -> String {
+            let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let host = host.map(str::to_owned).unwrap_or_else(|| format!("127.0.0.1:{port}"));
+            let worker = thread::spawn(move || serve(listener.accept().unwrap().0, port).unwrap());
+            let mut client = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
+            write!(client, "GET /preview?id=jNQXAC9IVRw HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
+            let mut response = String::new();client.read_to_string(&mut response).unwrap();worker.join().unwrap();response
+        }
+        let page = get(None);
+        assert!(page.starts_with("HTTP/1.1 200"));
+        assert!(page.contains("new YT.Player"));
+        assert!(page.contains("frame-src https://www.youtube.com"));
+        assert!(get(Some("example.com")).starts_with("HTTP/1.1 404"));
+    }
 
     #[test]
     fn embed_target_accepts_only_official_video_embeds() {

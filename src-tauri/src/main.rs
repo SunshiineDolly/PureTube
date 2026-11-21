@@ -8,7 +8,7 @@ mod desktop;
 mod audio_branding;
 mod downloads;
 mod original_player;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 mod youtube_embed;
 mod popout;
 mod updates;
