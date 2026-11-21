@@ -42,7 +42,7 @@ jobs:
           PURETUBE_ISOLATED_PROFILE: ${{ runner.temp }}/viddy-preview-check
           VIDDY_PREVIEW_REPORT: ${{ runner.temp }}/viddy-preview-report.json
         run: |
-          cargo build --release --locked --target aarch64-apple-darwin --manifest-path src-tauri/Cargo.toml --example mac-preview-check
+          cargo build --release --locked --target aarch64-apple-darwin --manifest-path src-tauri/Cargo.toml --example mac-preview-check --features tauri/custom-protocol
           python3 - <<'PY'
           import subprocess
           subprocess.run(['src-tauri/target/aarch64-apple-darwin/release/examples/mac-preview-check'], timeout=100, check=True)

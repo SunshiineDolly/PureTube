@@ -4,16 +4,27 @@ mod youtube_embed;
 
 #[cfg(target_os = "macos")]
 #[tauri::command]
-fn preview_check_result(app: tauri::AppHandle, report: serde_json::Value) {
+fn preview_check_result(app: tauri::AppHandle, mut report: serde_json::Value) {
     let path = std::env::var_os("VIDDY_PREVIEW_REPORT").expect("isolated report path");
+    report["firstProcessId"] = serde_json::json!(std::process::id());
     std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     println!("{report}");
-    app.exit(if report["videoTimeAdvanced"] == true { 0 } else { 1 });
+    if report["videoTimeAdvanced"] == true { app.restart(); } else { app.exit(1); }
 }
 
 #[cfg(target_os = "macos")]
 fn main() {
     use tauri::Manager;
+    let report_path = std::path::PathBuf::from(std::env::var_os("VIDDY_PREVIEW_REPORT").expect("report path"));
+    if let Ok(bytes) = std::fs::read(&report_path) {
+        let mut report: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        if report["videoTimeAdvanced"] == true && report["firstProcessId"] != serde_json::json!(std::process::id()) {
+            report["restartVerified"] = serde_json::json!(true);
+            std::fs::write(report_path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+            println!("{report}");
+            return;
+        }
+    }
     let profile = std::path::PathBuf::from(std::env::var_os("PURETUBE_ISOLATED_PROFILE").expect("isolated profile required"));
     assert!(profile.is_absolute());
     let mut context = tauri::generate_context!();
