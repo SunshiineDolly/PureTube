@@ -19,6 +19,7 @@ fn main() {
     let mut context = tauri::generate_context!();
     context.config_mut().identifier = "app.viddy.native-preview-check".into();
     for config in &mut context.config_mut().app.windows { config.create = false; }
+    let commands = tauri::generate_handler![youtube_embed::youtube_embed_port, preview_check_result];
     tauri::Builder::default()
         .setup(move |app| {
             app.manage(youtube_embed::EmbedOrigin::default());
@@ -29,7 +30,18 @@ fn main() {
                 .build()?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![youtube_embed::youtube_embed_port, preview_check_result])
+        .invoke_handler(move |invoke| {
+            if matches!(invoke.message.command(), "youtube_embed_port" | "preview_check_result") { return commands(invoke); }
+            let answer = match invoke.message.command() {
+                "load" => serde_json::json!({"version":1,"settings":{"intro":false,"tray":false,"themedCursor":false}}),
+                "public_feed" => serde_json::json!("<?xml version=\"1.0\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"/>"),
+                "search_youtube" | "channel_videos" => serde_json::json!({"items":[{"id":"jNQXAC9IVRw","title":"Native Mac preview check","description":"Public video","metadataComplete":true,"channelId":"UC0000000000000000000002","channel":"Example creator","image":"","date":"2026-11-21","duration":120,"shorts":false,"paid":false,"embeddable":true}],"next":null}),
+                "scheduled_channel" => serde_json::json!([]),
+                "account_configured" | "update_configured" => serde_json::json!(false),
+                _ => serde_json::Value::Null,
+            };
+            invoke.resolver.resolve(answer);true
+        })
         .run(context).expect("native preview check");
 }
 
