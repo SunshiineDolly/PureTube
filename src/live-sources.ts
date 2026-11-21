@@ -26,4 +26,3 @@ export function makeSources(mode:Mode,category:string,follows:string[]):Source[]
  return [...listings.slice(0,6),...followed.slice(0,2),...searches.slice(0,2),
    ...listings.slice(6),...searches.slice(2),...followed.slice(2)]
 }
-

@@ -158,12 +158,24 @@ pub struct SignIn {
 
 fn sync_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS account_sync (slot INTEGER PRIMARY KEY CHECK(slot = 1), owner TEXT NOT NULL, base TEXT);"
+        "CREATE TABLE IF NOT EXISTS account_sync (slot INTEGER PRIMARY KEY CHECK(slot = 1), owner TEXT NOT NULL, base TEXT);
+         CREATE TABLE IF NOT EXISTS account_profiles (owner TEXT PRIMARY KEY, data TEXT NOT NULL, base TEXT);"
     ).map_err(|_| "Could not initialize local account sync.".into())
 }
 
 fn bind(conn: &Connection, id: &str) -> Result<Option<Value>> {
     sync_table(conn)?;
+    let current = profile_owner(conn)?;
+    if current.is_none() {
+        let archived: Option<(String, Option<String>)> = conn.query_row(
+            "SELECT data, base FROM account_profiles WHERE owner=?1", [id], |r| Ok((r.get(0)?, r.get(1)?))
+        ).optional().map_err(|_| "Could not restore your local account library.")?;
+        if let Some((data, base)) = archived {
+            write_snapshot(conn, &data)?;
+            conn.execute("INSERT INTO account_sync(slot, owner, base) VALUES(1, ?1, ?2)", params![id, base])
+                .map_err(|_| "Could not restore your account link.")?;
+        }
+    }
     conn.execute("INSERT OR IGNORE INTO account_sync (slot, owner) VALUES (1, ?1)", [id])
         .map_err(|_| "Could not link this local library.")?;
     let base: Option<Option<String>> = conn.query_row(
@@ -193,9 +205,64 @@ pub fn save_synced(path: &Path, data: &Value, binding: &Binding) -> Result<()> {
     tx.commit().map_err(|_| "Could not save the synced library.".into())
 }
 
+pub fn profile_owner(conn: &Connection) -> Result<Option<String>> {
+    sync_table(conn)?;
+    conn.query_row("SELECT owner FROM account_sync WHERE slot=1", [], |r| r.get(0))
+        .optional().map_err(|_| "Could not read the active library profile.".into())
+}
+
+pub fn check_profile(conn: &Connection, expected: Option<&str>) -> Result<()> {
+    if profile_owner(conn)?.as_deref() != expected {
+        return Err("The library profile changed. This old save was ignored.".into());
+    }
+    Ok(())
+}
+
+fn guest_library(conn: &Connection) -> Result<Value> {
+    sync_table(conn)?;
+    let raw: Option<String> = conn.query_row("SELECT data FROM library WHERE id=1", [], |r| r.get(0))
+        .optional().map_err(|_| "Could not read your local library." )?;
+    let data: Value = raw.as_deref().map(serde_json::from_str).transpose()
+        .map_err(|_| "Could not read your local library." )?.unwrap_or(json!({"version":1}));
+    if let Some(owner) = profile_owner(conn)? {
+        conn.execute("INSERT INTO account_profiles(owner,data,base) SELECT owner,?1,base FROM account_sync WHERE slot=1 ON CONFLICT(owner) DO UPDATE SET data=excluded.data,base=excluded.base", [data.to_string()])
+            .map_err(|_| "Could not preserve your account library before logout." )?;
+        conn.execute("DELETE FROM account_sync WHERE slot=1 AND owner=?1", [owner])
+            .map_err(|_| "Could not switch to the guest library." )?;
+    }
+    // Preserve device appearance, while removing account filters and all personal library fields.
+    let mut settings = serde_json::Map::new();
+    for key in ["theme","accent","collapsed","density","tray","closeToTray","intro","themedCursor","showTime"] {
+        if let Some(value) = data.pointer(&format!("/settings/{key}")) { settings.insert(key.into(), value.clone()); }
+    }
+    let guest = json!({"version":1,"settings":settings});
+    write_snapshot(conn, &guest.to_string())?;
+    Ok(guest)
+}
+
+pub fn ensure_visible_profile(app: &AppData) -> Result<()> {
+    // Older versions left the last account library active after removing its session.
+    // Hide that legacy data before the UI loads, including after a restart.
+    if profile_owner(&database(&app.db)?)?.is_some() && load_session(&app.db)?.is_none() {
+        detach_library(app, false)?;
+    }
+    Ok(())
+}
+
+fn detach_library(app: &AppData, remove_credential: bool) -> Result<()> {
+    let _guard = app.library_guard.lock().map_err(|_| "Library is busy.")?;
+    let mut conn = database(&app.db)?;
+    let tx = conn.transaction().map_err(|_| "Could not switch library profiles." )?;
+    let guest = guest_library(&tx)?;
+    if let Some(recovery) = &app.recovery { crate::write(recovery, guest)?; }
+    if remove_credential { clear_session(&app.db)?; }
+    tx.commit().map_err(|_| "Could not save the guest library." )?;
+    Ok(())
+}
+
 async fn authorized_response(app: &AppData, active: &mut Option<Session>, response: reqwest::Response) -> Result<reqwest::Response> {
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        clear_session(&app.db)?;
+        detach_library(app, true)?;
         *active = None;
         return Err("SIGNED_OUT: This device was signed out. Please sign in with Discord again.".into());
     }
@@ -234,11 +301,15 @@ pub async fn account_sign_out(app: State<'_, AppData>, account: State<'_, Accoun
     let mut active = account.0.lock().await;
     // Do not report successful logout if the saved session could not be removed.
     let session = if active.is_some() { active.clone() } else { load_session(&app.db).ok().flatten() };
-    clear_session(&app.db)?;
+    detach_library(&app, true)?;
     *pending = None;
     *active = None;
     if let Some(session) = session {
-        let _ = request(&app, reqwest::Method::POST, "/v1/logout").bearer_auth(session.token).send().await;
+        let client = app.client.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = client.post(format!("{SERVICE}/v1/logout")).bearer_auth(session.token)
+                .timeout(std::time::Duration::from_secs(10)).send().await;
+        });
     }
     Ok(())
 }
@@ -261,6 +332,56 @@ mod tests {
         save_synced(&path, &cloud, &own).unwrap();
         assert_eq!(crate::read(&path).unwrap(), Some(cloud.clone()));
         assert_eq!(bind(&conn, "discord:1234567890123456").unwrap(), Some(cloud));
+    }
+
+    #[test]
+    fn logout_opens_a_clean_guest_and_restores_only_the_same_accounts_library() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("library.sqlite3");
+        let mut conn = database(&path).unwrap();
+        let alice = "discord:1234567890123456";
+        let bob = "discord:9999999999999999";
+        bind(&conn, alice).unwrap();
+        let personal = json!({"version":1,"profileName":"Alice","follows":["UCprivate"],"history":{"video":123},"favorites":["saved"],"viewing":{"private":1},"settings":{"theme":"dark","keywords":["private"],"blocked":["private"]}});
+        save_synced(&path, &personal, &Binding{id:alice.into(),base:Some(personal.clone())}).unwrap();
+        let tx = conn.transaction().unwrap();
+        let guest = guest_library(&tx).unwrap();
+        tx.commit().unwrap();
+        assert_eq!(guest, json!({"version":1,"settings":{"theme":"dark"}}));
+        assert_eq!(crate::read(&path).unwrap(), Some(guest.clone()));
+        assert_eq!(profile_owner(&database(&path).unwrap()).unwrap(), None);
+        assert!(check_profile(&conn, Some(alice)).is_err());
+        assert!(save_synced(&path, &personal, &Binding{id:alice.into(),base:Some(personal.clone())}).is_err());
+        assert_eq!(bind(&conn, bob).unwrap(), None);
+        assert_eq!(crate::read(&path).unwrap(), Some(guest));
+        let bob_data = json!({"version":1,"profileName":"Bob","follows":["UCbob"]});
+        write_snapshot(&conn, &bob_data.to_string()).unwrap();
+        guest_library(&conn).unwrap();
+        assert_eq!(bind(&conn, alice).unwrap(), Some(personal.clone()));
+        assert_eq!(crate::read(&path).unwrap(), Some(personal));
+        assert!(check_profile(&conn, None).is_err());
+        guest_library(&conn).unwrap();
+        bind(&conn, bob).unwrap();
+        assert_eq!(crate::read(&path).unwrap(), Some(bob_data));
+    }
+
+    #[test]
+    fn legacy_logged_out_profiles_are_hidden_before_loading_and_backup_is_guest() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("library.sqlite3");
+        let backup = temp.path().join("backup.sqlite3");
+        let conn = database(&path).unwrap();
+        let owner = "discord:1234567890123456";
+        bind(&conn, owner).unwrap();
+        let personal = json!({"version":1,"follows":["private"],"history":{"private":123}});
+        write_snapshot(&conn, &personal.to_string()).unwrap();
+        let app = AppData {db:path.clone(),recovery:Some(backup.clone()),library_guard:std::sync::Mutex::new(()),client:reqwest::Client::new(),isolated:true};
+        ensure_visible_profile(&app).unwrap();
+        let guest = json!({"version":1,"settings":{}});
+        assert_eq!(crate::read(&path).unwrap(), Some(guest.clone()));
+        assert_eq!(crate::read(&backup).unwrap(), Some(guest));
+        bind(&conn, owner).unwrap();
+        assert_eq!(crate::read(&path).unwrap(), Some(personal));
     }
 
     #[test]

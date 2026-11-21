@@ -2,6 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
 import {errorText} from './domain'
 import {cloudLibrary, emptyCloudLibrary, mergeCloudLibrary, readCloudLibrary, sameCloudLibrary, sameVideo, type CloudLibrary} from './account-library'
+import {resetRecommendationMemory} from './use-recommendations'
 import type {Library} from './library'
 
 type Identity = {id: string; display_name: string}
@@ -9,6 +10,12 @@ type Snapshot = {revision: number; data: unknown}
 type Binding = {id: string; base: CloudLibrary}
 type SignIn = {identity: Identity; base: unknown}
 type Change = (update: (previous: Library) => Library, cloud?: Binding) => Promise<void>
+
+async function reloadProfile() {
+ await Promise.allSettled([invoke('close_player'),invoke('close_original_player')])
+ resetRecommendationMemory()
+ window.location.reload()
+}
 
 export function useAccount(ready: boolean, read: () => Library, change: Change) {
  const [configured, setConfigured] = useState<boolean>()
@@ -37,6 +44,7 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
    } catch (error) {
      const text = errorText(error)
      if (text.startsWith('SIGNED_OUT:')) {
+       await reloadProfile()
        binding.current = undefined
        knownRevision.current = undefined
        setUser(undefined)
@@ -121,7 +129,7 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
      try {
        const result = await invoke<SignIn | null>('account_poll')
        if (result) {
-         if (!stopped) await acceptSignIn(result)
+         if (!stopped) {await reloadProfile()}
          return
        }
        if (!stopped) timer = window.setTimeout(poll, 750)
@@ -156,13 +164,14 @@ export function useAccount(ready: boolean, read: () => Library, change: Change) 
      setPending(false)
      // A browser callback may have finished just before cancellation.
      const result = await invoke<SignIn | null>('account_restore')
-     if (result) await acceptSignIn(result)
+     if (result) {resetRecommendationMemory();window.location.reload()}
    })
  }
 
  function signOut() {
    return run(async () => {
      await invoke('account_sign_out')
+     await reloadProfile()
      binding.current = undefined
      knownRevision.current = undefined
      setUser(undefined)

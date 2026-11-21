@@ -6,8 +6,10 @@ import type {CloudLibrary} from './account-library'
 
 export function useLibrary() {
  const [data,setData]=useState<Library>(empty),[ready,setReady]=useState(false),[failed,setFailed]=useState(false),[error,setError]=useState('')
+ const profile=useRef<string|null>(null)
  const current=useRef(data), queue=useRef(Promise.resolve())
- useEffect(()=>{invoke<unknown>('load').then(raw=>{
+ useEffect(()=>{invoke<unknown>('load').then(async raw=>{const owner=await invoke<string|null>('library_profile')
+   profile.current=owner
    const initial=raw?decode(raw):empty()
    current.current=initial;setData(initial);setReady(true)
  }).catch(e=>{setError(errorText(e));setFailed(true)})},[])
@@ -19,7 +21,7 @@ export function useLibrary() {
      // Multiple rapid updates share the latest snapshot rather than writing
      // every intermediate copy of the full library.
      if(current.current!==next&&!cloud)return
-     return invoke<void>('save',{data:next,cloud})
+     return invoke<void>('save',{data:next,cloud,profile:profile.current})
    }).then(()=>setError(''))
    queue.current=saved.catch(e=>setError(errorText(e)))
    return saved

@@ -70,6 +70,7 @@ fn write_snapshot(conn: &Connection, raw: &str) -> Result<()> {
 }
 #[tauri::command]
 fn load(state: State<AppData>) -> Result<Option<Value>> {
+    account::ensure_visible_profile(&state)?;
     let _guard = state.library_guard.lock().map_err(|_| "Library is busy.")?;
     recover_library(&state.db, state.recovery.as_deref())
 }
@@ -93,8 +94,14 @@ fn recover_library(primary: &Path, recovery: Option<&Path>) -> Result<Option<Val
     current
 }
 #[tauri::command]
-fn save(app: tauri::AppHandle, state: State<AppData>, data: Value, cloud: Option<account::Binding>) -> Result<()> {
+fn library_profile(state: State<AppData>) -> Result<Option<String>> {
     let _guard = state.library_guard.lock().map_err(|_| "Library is busy.")?;
+    account::profile_owner(&database(&state.db)?)
+}
+#[tauri::command]
+fn save(app: tauri::AppHandle, state: State<AppData>, data: Value, cloud: Option<account::Binding>, profile: Option<String>) -> Result<()> {
+    let _guard = state.library_guard.lock().map_err(|_| "Library is busy.")?;
+    account::check_profile(&database(&state.db)?, profile.as_deref())?;
     let show_tray = data
         .pointer("/settings/tray")
         .and_then(Value::as_bool)
@@ -266,6 +273,7 @@ fn main() {
         youtube_embed::youtube_embed_port,
         account::account_configured,
         account::account_start,
+        library_profile,
         account::account_restore,
         account::account_poll,
         account::account_cancel,
