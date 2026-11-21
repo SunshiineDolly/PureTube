@@ -516,3 +516,16 @@
 }
 
 .channel-search-form input{width:min(100%,440px);flex:1;min-width:180px}.channel-search-results{margin:0 0 26px}.channel-search-results h2{font-size:17px;margin-bottom:12px}.channel-search-results .grow{min-width:0}.channel-search-results .meta{overflow-wrap:anywhere}
+
+.collection-saver{width:360px;min-width:0}
+.collection-saver summary{gap:9px;font-weight:600;list-style:none}
+.collection-saver summary::-webkit-details-marker{display:none}
+.collection-saver summary .details-chevron{margin-left:auto;color:var(--muted);flex:none}
+.collection-saver .playlist-saver-body{border-top:1px solid var(--border);padding:16px}
+.collection-saver form{display:grid;gap:12px;padding:0;min-width:0}
+.playlist-field{display:grid;gap:7px;font-size:12px;font-weight:600;color:var(--sub);min-width:0}
+.playlist-field input,.playlist-field select{width:100%;min-width:0;font-size:14px;font-weight:400;color:var(--text)}
+.playlist-feedback{font-size:12px;color:var(--sub);line-height:1.5;overflow-wrap:anywhere}
+.playlist-feedback[role=alert]{color:var(--text)}
+.playlist-saver-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.playlist-saver-actions .playlist-new{margin-right:auto}
