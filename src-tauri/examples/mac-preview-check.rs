@@ -46,7 +46,7 @@ fn main() {
             let answer = match invoke.message.command() {
                 "load" => serde_json::json!({"version":1,"settings":{"intro":false,"tray":false,"themedCursor":false}}),
                 "public_feed" => serde_json::json!("<?xml version=\"1.0\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"/>"),
-                "search_youtube" | "channel_videos" => serde_json::json!({"items":[{"id":"jNQXAC9IVRw","title":"Native Mac preview check","description":"Public video","metadataComplete":true,"channelId":"UC0000000000000000000002","channel":"Example creator","image":"","date":"2026-11-21","duration":120,"shorts":false,"paid":false,"embeddable":true}],"next":null}),
+                "search_youtube" | "channel_videos" => serde_json::json!({"items":[{"id":"M7lc1UVf-VE","title":"Native Mac preview check","description":"Public video","metadataComplete":true,"channelId":"UC0000000000000000000002","channel":"Example creator","image":"","date":"2026-11-21","duration":120,"shorts":false,"paid":false,"embeddable":true}],"next":null}),
                 "scheduled_channel" => serde_json::json!([]),
                 "account_configured" | "update_configured" => serde_json::json!(false),
                 _ => serde_json::Value::Null,
