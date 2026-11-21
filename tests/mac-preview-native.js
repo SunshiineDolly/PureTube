@@ -1,6 +1,8 @@
 (() => {
   // Only the standalone test executable loads this script. No user account or library.
   if (window !== window.top) {
+    addEventListener('securitypolicyviolation',e=>top.postMessage({type:'viddy-native-error',error:'CSP '+e.violatedDirective+' '+e.blockedURI},'*'));
+    addEventListener('error',e=>top.postMessage({type:'viddy-native-error',error:e.message},'*'));
     if (location.hostname === '127.0.0.1') setInterval(() => {
       const player = window.viddyPreviewPlayer;
       if (player?.getCurrentTime) parent.postMessage({type:'viddy-native-time',time:player.getCurrentTime()}, '*');
@@ -14,7 +16,8 @@
   addEventListener('error',e=>report.errors.push(e.message));
   addEventListener('securitypolicyviolation',e=>report.errors.push('CSP '+e.violatedDirective+' '+e.blockedURI));
   addEventListener('message',e=>{
-    if(e.data?.type==='viddy-video-preview')report.states.push(e.data.state);
+    if(e.data?.type==='viddy-video-preview')report.states.push({state:e.data.state,code:e.data.code});
+    if(e.data?.type==='viddy-native-error')report.errors.push(e.data.error);
     if(e.data?.type==='viddy-native-time'){
       if(first===undefined)first=e.data.time;
       if(e.data.time>first+1){report.videoTimeAdvanced=true;finish();}

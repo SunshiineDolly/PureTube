@@ -3,13 +3,13 @@
 <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}iframe{display:block;width:100%;height:100%;border:0}</style></head>
 <body><iframe id="preview" title="Muted YouTube video preview" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" src="https://www.youtube.com/embed/{{ID}}?autoplay=1&amp;mute=1&amp;controls=0&amp;playsinline=1&amp;rel=0&amp;enablejsapi=1&amp;origin=http%3A%2F%2F127.0.0.1%3A{{PORT}}"></iframe>
 <script>
-function notify(state){document.documentElement.dataset.previewState=state;parent.postMessage({type:'viddy-video-preview',id:'{{ID}}',state:state},'*')}
+function notify(state,code){document.documentElement.dataset.previewState=state;parent.postMessage({type:'viddy-video-preview',id:'{{ID}}',state:state,code:code},'*')}
 window.onYouTubeIframeAPIReady=function(){
  window.viddyPreviewPlayer=new YT.Player(document.getElementById('preview'),{events:{
   onReady:function(event){event.target.mute();event.target.playVideo();notify('ready')},
   onStateChange:function(event){if(event.data===1)notify('playing');if(event.data===0)notify('ended')},
   onAutoplayBlocked:function(){notify('blocked')},
-  onError:function(){notify('error')}
+  onError:function(event){notify('error',event.data)}
  }})
 }
 </script><script src="https://www.youtube.com/iframe_api" onerror="notify('error')"></script></body></html>

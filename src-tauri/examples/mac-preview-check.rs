@@ -19,7 +19,7 @@ fn main() {
     let mut context = tauri::generate_context!();
     context.config_mut().identifier = "app.viddy.native-preview-check".into();
     for config in &mut context.config_mut().app.windows { config.create = false; }
-    let commands = tauri::generate_handler![youtube_embed::youtube_embed_port, preview_check_result];
+    let commands: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![youtube_embed::youtube_embed_port, preview_check_result];
     tauri::Builder::default()
         .setup(move |app| {
             app.manage(youtube_embed::EmbedOrigin::default());
