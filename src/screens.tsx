@@ -1,4 +1,4 @@
-import {useRef,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import {Plus, RefreshCw,ListPlus,Bookmark,X} from 'lucide-react'
 import {AutoMore,Empty,Loading,VideoGrid} from './components'
 import {errorText,fillCreator,publicNewest,unique,uploadAge,videoId,visible,type Video} from './domain'
@@ -62,21 +62,46 @@ export function Quiet({shared}:{shared:Shared}) {
 
 export function Subscriptions({shared}:{shared:Shared}) {
  const {data,channel,follow,feeds}=shared
- const [lookup,setLookup]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+ type Match={id:string;name:string;handle?:string;image?:string}
+ const [lookup,setLookup]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0)
+ const [search,setSearch]=useState<{term:string;items:Match[];error?:string}>()
+ const term=lookup.trim(),direct=parseChannel(term)
  const ids=shared.followIds.filter(id=>!data.settings.blocked.includes(id))
- async function add() {
+ useEffect(()=>{
+   if(term.length<2||direct)return
+   let active=true
+   const timer=setTimeout(()=>{
+     void invoke<Match[]>('search_creators',{query:term}).then(
+       items=>{if(active)setSearch({term,items})},
+       e=>{if(active)setSearch({term,items:[],error:errorText(e)})},
+     )
+   },350)
+   return()=>{active=false;clearTimeout(timer)}
+ },[term,direct,retry])
+ async function add(id=direct,verified=false) {
+   if(!id)return
    setBusy(true);setError('')
-   try{const id=parseChannel(lookup)
-     if(!id)throw new Error('Use a UC channel ID, a /channel/ link, or a feed URL. On YouTube, open the channel’s About panel and select Share channel > Copy channel ID.')
+   try{
      if(data.settings.blocked.includes(id))throw new Error('Unblock this channel in Settings before following.')
-     if(!data.follows.includes(id)){await publicFeed(id);follow(id)}
-     setLookup('')
+     if(!data.follows.includes(id)){if(!verified)await publicFeed(id);follow(id)}
+     if(!verified)setLookup('')
    }catch(e){setError(errorText(e))}finally{setBusy(false)}
  }
- return <><Heading label="YOUR CREATORS" title="Manage channels" detail="Add the creators you watch. Following in Viddy stays on this PC."/>
- <form className="filter-row" onSubmit={e=>{e.preventDefault();void add()}}><input aria-label="Channel ID or link" placeholder="Channel ID or link" value={lookup} onChange={e=>setLookup(e.target.value)}/><button className="button" disabled={busy||!lookup.trim()}><Plus size={16}/> {busy?'Checking...':'Follow'}</button></form>
+ const searching=term.length>=2&&!direct
+ return <><Heading label="YOUR CREATORS" title="Manage channels" detail="Find creators by name or handle, then follow them to build your feed."/>
+ <form className="filter-row channel-search-form" onSubmit={e=>{e.preventDefault();if(direct)void add();else{setSearch(undefined);setRetry(n=>n+1)}}}>
+   <input aria-label="Find channels to follow" placeholder="Channel name, @handle, ID or link" maxLength={256} autoComplete="off" value={lookup} onChange={e=>{setLookup(e.target.value);setError('')}}/>
+   <button className="button" disabled={busy||term.length<2}>{direct?<Plus size={16}/>:null}{busy?'Checking…':direct?'Follow':'Search'}</button>
+ </form>
  {error&&<Notice text={error}/>}
- {!ids.length?<Empty title="No visible subscriptions" detail="Paste a YouTube channel ID or channel feed link. On YouTube, open the channel’s About panel, then choose Share channel and Copy channel ID."/>:
+ {searching&&<section className="channel-search-results" aria-label="Channel search results" aria-busy={search?.term!==term}>
+   <h2>Matching channels</h2>
+   {search?.term!==term?<p className="meta" role="status">Finding channels…</p>:search.error?<><Notice text={search.error}/><button className="button" onClick={()=>{setSearch(undefined);setRetry(n=>n+1)}}>Try again</button></>:search.items.length?<div className="list">{search.items.map(ch=>{
+     const followed=data.follows.includes(ch.id),blocked=data.settings.blocked.includes(ch.id)
+     return <div className="list-row" key={ch.id}><CreatorAvatar id={ch.id} name={ch.name} src={ch.image}/><div className="grow"><button className="video-title" onClick={()=>channel(ch.id)}>{ch.name}</button><div className="meta">{ch.handle||ch.id}</div></div><button className="button" disabled={busy||followed||blocked} aria-label={(followed?'Following ':blocked?'Blocked ':'Follow ')+ch.name} onClick={()=>void add(ch.id,true)}>{followed?'Following':blocked?'Blocked':'Follow'}</button></div>
+   })}</div>:<p className="meta" role="status">No matching channels. Try another name or @handle.</p>}
+ </section>}
+ {!ids.length?<Empty title="No visible subscriptions" detail="Search for a channel name or @handle above, or paste a channel ID or link."/>:
  <div className="list">{ids.map(id=>{
    const c=feeds.states[id]?.feed
    return <div className="list-row" key={id}><CreatorAvatar id={id} name={c?.title??id}/><div className="grow"><button className="video-title" onClick={()=>channel(id)}>{c?.title??id}</button><div className="meta">{c?'Last checked '+new Date(c.checkedAt).toLocaleString():feeds.states[id]?.error??'Waiting for first check'}</div></div><button className="button" onClick={()=>follow(id)}>{'Unfollow'}</button></div>

@@ -478,3 +478,41 @@
  .app > .top .header-center{padding-inline:0}
 }
 .studio-discover .video-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))}
+
+/* Windows navigation stays in view; the creator preview uses only the remaining space. */
+.sidebar-follow-preview{display:contents}
+.app[data-platform=windows]>.sidebar{overflow:clip;padding:14px 13px 10px}
+.app[data-platform=windows] .sidebar nav{gap:4px}
+.app[data-platform=windows] .sidebar-section{margin-top:12px;padding-top:10px}
+.app[data-platform=windows] .sidebar-section-label{margin-bottom:6px}
+.app[data-platform=windows] .sidebar .sidebar-follows{display:flex;flex-direction:column;flex:1;min-height:0;margin-top:12px;padding-top:10px;gap:4px}
+.app[data-platform=windows] .sidebar-follows>p{flex:none;line-height:20px;margin:0 8px 2px}
+.app[data-platform=windows] .sidebar-follow-preview{display:flex;flex-direction:column;flex:1;min-height:0;max-height:206px;gap:4px;container:viddy-follows / size;overflow:clip}
+.app[data-platform=windows] .sidebar-follow-preview>button{height:38px;min-height:38px;flex:none}
+.app[data-platform=windows] .sidebar-footer{flex:none}
+@container viddy-follows (height < 206px){.sidebar-follow-preview>button:nth-child(n+5){display:none}}
+@container viddy-follows (height < 164px){.sidebar-follow-preview>button:nth-child(n+4){display:none}}
+@container viddy-follows (height < 122px){.sidebar-follow-preview>button:nth-child(n+3){display:none}}
+@container viddy-follows (height < 80px){.sidebar-follow-preview>button:nth-child(n+2){display:none}}
+@container viddy-follows (height < 38px){.sidebar-follow-preview>button:nth-child(n){display:none}}
+@media(max-height:850px){
+ .app[data-platform=windows] .sidebar nav button{min-height:36px}
+ .app[data-platform=windows] .sidebar-follow-preview>button{min-height:38px}
+}
+@media(max-height:700px){
+ .app[data-platform=windows] .sidebar nav button{min-height:32px}
+ .app[data-platform=windows] .sidebar-follow-preview>button{min-height:38px}
+}
+@media(max-height:600px){
+ .app[data-platform=windows]>.sidebar{padding:8px 10px}
+ .app[data-platform=windows] .sidebar nav{gap:2px}
+ .app[data-platform=windows] .sidebar nav button{min-height:30px}
+ .app[data-platform=windows] .sidebar-follow-preview>button{min-height:38px}
+ .app[data-platform=windows] .sidebar-section,.app[data-platform=windows] .sidebar .sidebar-follows{margin-top:8px;padding-top:6px}
+ .app[data-platform=windows] .sidebar-section-label{line-height:16px;margin-bottom:4px}
+ .app[data-platform=windows] .sidebar-follows>p{font-size:12px;line-height:18px}
+ .app[data-platform=windows] .sidebar-footer{padding-top:6px;line-height:16px}
+ .app[data-platform=windows] .sidebar-footer p{margin-bottom:0}
+}
+
+.channel-search-form input{width:min(100%,440px);flex:1;min-width:180px}.channel-search-results{margin:0 0 26px}.channel-search-results h2{font-size:17px;margin-bottom:12px}.channel-search-results .grow{min-width:0}.channel-search-results .meta{overflow-wrap:anywhere}
