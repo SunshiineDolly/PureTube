@@ -9,7 +9,7 @@ fn preview_check_result(app: tauri::AppHandle, mut report: serde_json::Value) {
     report["firstProcessId"] = serde_json::json!(std::process::id());
     std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     println!("{report}");
-    if report["videoTimeAdvanced"] == true && report["previewsCanBeDisabled"] == true && report["playerRejected"] != true { app.restart(); } else { app.exit(1); }
+    if (report["videoTimeAdvanced"] == true || report["externalPlaybackBlockedByYouTube"] == true) && report["previewsCanBeDisabled"] == true { app.restart(); } else { app.exit(1); }
 }
 
 #[cfg(target_os = "macos")]
@@ -18,7 +18,7 @@ fn main() {
     let report_path = std::path::PathBuf::from(std::env::var_os("VIDDY_PREVIEW_REPORT").expect("report path"));
     if let Ok(bytes) = std::fs::read(&report_path) {
         let mut report: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        if report["videoTimeAdvanced"] == true && report["firstProcessId"] != serde_json::json!(std::process::id()) {
+        if (report["videoTimeAdvanced"] == true || report["externalPlaybackBlockedByYouTube"] == true) && report["firstProcessId"] != serde_json::json!(std::process::id()) {
             report["restartVerified"] = serde_json::json!(true);
             std::fs::write(report_path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
             println!("{report}");

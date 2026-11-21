@@ -29,7 +29,7 @@
   addEventListener('error',e=>report.errors.push(e.message));
   addEventListener('securitypolicyviolation',e=>report.errors.push('CSP '+e.violatedDirective+' '+e.blockedURI));
   addEventListener('message',e=>{
-    if(e.data?.type==='viddy-video-preview'){report.states.push({state:e.data.state,code:e.data.code});if(e.data.state==='error'||e.data.state==='blocked'){e.stopImmediatePropagation();report.playerRejected=true;setTimeout(finish,3500)}}
+    if(e.data?.type==='viddy-video-preview'){report.states.push({state:e.data.state,code:e.data.code});if(e.data.state==='error'||e.data.state==='blocked'){e.stopImmediatePropagation();report.playerRejected=true;setTimeout(()=>{if(report.playerText?.includes('Sign in to confirm')&&report.playerText?.includes('not a bot')){report.externalPlaybackBlockedByYouTube=true;void checkToggle()}else finish()},3500)}}
     if(e.data?.type==='viddy-native-page'){report.playerText=e.data.text;report.playerStatus=e.data.status};
     if(e.data?.type==='viddy-native-error')report.errors.push(e.data.error);
     if(e.data?.type==='viddy-native-time'){
